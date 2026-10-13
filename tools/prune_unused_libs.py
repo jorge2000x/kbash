@@ -33,7 +33,7 @@ def main() -> int:
         return 2
     app = Path(sys.argv[1]).resolve()
     dry = "--dry-run" in sys.argv
-    site = app / "usr/lib/python3.14/site-packages"
+    site = app / "usr/lib/python3.11/site-packages"
     ps = site / "PySide6"
     lib_dirs = [app / "usr/lib/x86_64-linux-gnu", ps / "Qt/lib"]
 

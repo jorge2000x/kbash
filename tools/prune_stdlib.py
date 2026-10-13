@@ -62,7 +62,7 @@ def main() -> int:
     if "--trace" in sys.argv:
         trace = Path(sys.argv[sys.argv.index("--trace") + 1])
 
-    std = app / "usr/lib/python3.14"
+    std = app / "usr/lib/python3.11"
     site = std / "site-packages"
     dyn = std / "lib-dynload"
 
