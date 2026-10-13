@@ -1717,6 +1717,63 @@ def test_portal_full_loop_without_ui(app, tmp_path: Path, monkeypatch) -> None:
         app.processEvents()
 
 
+def test_portal_response_uint32_reaches_slot_over_bus(app, tmp_path: Path, monkeypatch) -> None:
+    """Regressão: o portal real manda o código como uint32 (`u`). Um slot `int`
+    não recebe esse sinal e o Cancelar não fecha o pedido. Aqui a resposta
+    passa pelo barramento de verdade (gdbus emit) e tem de chegar ao slot."""
+    import shutil
+    import subprocess
+
+    from PySide6.QtDBus import QDBusMessage, QDBusObjectPath
+
+    import rt.gui.bridge as bmod
+    from rt.core.parser import parse_script
+    from rt.gui.bridge import Bridge
+
+    if shutil.which("gdbus") is None:
+        pytest.skip("gdbus indisponível: sem barramento para o teste")
+    PATH = "/org/test/uint32req"
+    monkeypatch.setattr(bmod, "_portal_service_available", lambda: True)
+
+    class FakeReply:
+        def type(self):  # noqa: ANN204
+            return QDBusMessage.MessageType.ReplyMessage
+
+        def arguments(self):  # noqa: ANN204
+            return [QDBusObjectPath(PATH)]
+
+    class FakeWatcher:
+        def reply(self):  # noqa: ANN204
+            return FakeReply()
+
+        def deleteLater(self):  # noqa: ANN204
+            pass
+
+    script = tmp_path / "portal5.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name P\n#@step a\na() { :; }\n",
+        encoding="utf-8",
+    )
+    bridge = Bridge(parse_script(script))
+    picked: list = []
+    bridge.filePicked.connect(lambda token, paths: picked.append((token, list(paths))))
+    try:
+        bridge._portal_token = "opt"
+        bridge._on_portal_call_done(FakeWatcher())
+        assert spin(app, lambda: bridge._portal_conn is not None)
+        subprocess.run(
+            ["gdbus", "emit", "--session", "--object-path", PATH,
+             "--signal", "org.freedesktop.portal.Request.Response",
+             "uint32 1", "@a{sv} {}"],
+            check=True, capture_output=True, timeout=10,
+        )
+        assert spin(app, lambda: len(picked) == 1)
+        assert picked[0] == ("opt", [])
+        assert bridge._portal_token is None
+    finally:
+        bridge.shutdown()
+        app.processEvents()
+
 def _visible_with_text(field: object, text: str) -> list:
     """Itens visíveis dentro do OptionField cujo `text` é o dado (§4.3 paragraph/link)."""
     from PySide6.QtQuick import QQuickItem

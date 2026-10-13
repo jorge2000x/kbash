@@ -66,7 +66,9 @@ PORTAL_TIMEOUT_MS = 120_000
 #: Slot string no formato do Qt (`1 + nome + tipos normalizados`).
 #: Medido: `uint` faz o connect retornar False; `int` casa
 #: (o QtDBus converte o uint32 do signal na entrega).
-PORTAL_RESPONSE_SLOT = "1_on_portal_response(int,QVariantMap)"
+#: O portal manda o código como `uint32` (`u`). Um slot `int` não recebe
+#: esse sinal: o Qt não entrega e nada aparece no log (bug de cancelar).
+PORTAL_RESPONSE_SLOT = "1_on_portal_response(uint,QVariantMap)"
 
 
 def _portal_service_available() -> bool:
@@ -543,7 +545,7 @@ class Bridge(QObject):
             return
         self._portal_conn = ("", handle_path, PORTAL_REQUEST_IFACE, "Response")
 
-    @Slot(int, dict)
+    @Slot("uint", "QVariantMap")
     def _on_portal_response(self, response: int, results: dict) -> None:
         """Resposta do portal: `0` = ok com `uris`; o resto é cancelado."""
         from PySide6.QtCore import QUrl
