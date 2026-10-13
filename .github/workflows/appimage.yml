@@ -51,7 +51,7 @@ jobs:
       - name: Pacotes Kirigami/Breeze (Ubuntu 26.04)
         run: |
           mkdir -p "$RUNNER_TEMP/debs" && cd "$RUNNER_TEMP/debs"
-          xargs -n1 -P8 curl -sSfO < "$GITHUB_WORKSPACE/tools/breeze-debs.txt"
+          grep "^https" "$GITHUB_WORKSPACE/tools/breeze-debs.txt" | xargs -n1 -P8 curl -sSfO
           mkdir -p "$RUNNER_TEMP/debsx"
           for f in *.deb; do dpkg-deb -x "$f" "$RUNNER_TEMP/debsx"; done
 
