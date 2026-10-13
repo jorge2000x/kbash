@@ -39,7 +39,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl \
-            python3.14 python3.14-venv python3 binutils file squashfs-tools xz-utils build-essential
+            python3.14 python3.14-venv python3 binutils file squashfs-tools xz-utils build-essential gzip gawk findutils sed make
           python3.14 --version
 
       - name: Venv com PySide6 6.10.2 (Qt igual ao dos pacotes Ubuntu)
@@ -75,8 +75,19 @@ jobs:
         if: steps.icu.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/icu-out"
+          for t in bash curl tar gzip gcc g++ make python3 nproc strip cp rm du sed awk uname sh; do
+            printf '%-8s %s\n' "$t" "$(command -v "$t" || echo AUSENTE)"
+          done
           bash tools/build-icu-data.sh "$RUNNER_TEMP/icu-work" \
             "$RUNNER_TEMP/icu-out/libicudata.so.73"
+
+      - name: Logs do ICU (só se falhar)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: icu-logs-${{ matrix.variant }}
+          path: ${{ runner.temp }}/icu-work/*.log
+          if-no-files-found: warn
 
       - name: Build
         env:
