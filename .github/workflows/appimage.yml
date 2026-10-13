@@ -18,8 +18,8 @@ jobs:
   build:
     name: AppImage ${{ matrix.variant }}
     runs-on: ubuntu-24.04
-    # Container ubuntu:24.04 (noble): Python 3.11 e pacotes do apt limpos, sem o apt do runner
-    container: ubuntu:24.04
+    # Container ubuntu:26.04: mesmo Ubuntu dos .deb Kirigami/Breeze
+    container: ubuntu:26.04
     strategy:
       fail-fast: false
       matrix:
@@ -38,12 +38,8 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-            software-properties-common binutils squashfs-tools xz-utils
-          # python3.11 não está no Ubuntu 24.04 (noble): vem do PPA deadsnakes
-          add-apt-repository -y ppa:deadsnakes/ppa
-          apt-get update
-          apt-get install -y --no-install-recommends python3.11 python3.11-venv
+          apt-get install -y --no-install-recommends ca-certificates curl \
+            python3.11 python3.11-venv binutils squashfs-tools xz-utils
           python3.11 --version
 
       - name: Venv com PySide6 6.10.2 (Qt igual ao dos pacotes Ubuntu)
