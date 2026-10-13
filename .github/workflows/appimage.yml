@@ -39,7 +39,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl \
-            python3.14 python3.14-venv python3 binutils file squashfs-tools xz-utils
+            python3.14 python3.14-venv python3 binutils file squashfs-tools xz-utils build-essential
           python3.14 --version
 
       - name: Venv com PySide6 6.10.2 (Qt igual ao dos pacotes Ubuntu)
@@ -64,6 +64,20 @@ jobs:
           ./appimagetool.AppImage --appimage-extract >/dev/null
           test -x squashfs-root/AppRun
 
+      - name: ICU filtrado (en/pt) - cache
+        id: icu
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/icu-out/libicudata.so.73
+          key: icu73-enpt-${{ hashFiles('tools/build-icu-data.sh') }}
+
+      - name: Compila ICU filtrado (~15 min, só quando o cache falta)
+        if: steps.icu.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/icu-out"
+          bash tools/build-icu-data.sh "$RUNNER_TEMP/icu-work" \
+            "$RUNNER_TEMP/icu-out/libicudata.so.73"
+
       - name: Build
         env:
           VENV: ${{ runner.temp }}/venv
@@ -71,6 +85,7 @@ jobs:
           BUILD: ${{ runner.temp }}/appdir-${{ matrix.variant }}
           APPIMAGETOOL: ${{ runner.temp }}/squashfs-root/AppRun
           PAYLOAD: ${{ matrix.payload }}
+          ICU_DATA_SO: ${{ runner.temp }}/icu-out/libicudata.so.73
         run: |
           mkdir -p "$RUNNER_TEMP/out"
           bash tools/build-appimage.sh "$GITHUB_WORKSPACE" \
