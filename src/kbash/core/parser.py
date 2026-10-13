@@ -329,7 +329,7 @@ class _Parser:
             self._close_pending()  # a linha de código encerra o bloco de option
         function = _match_function(code)
         if function is not None:
-            self._on_function(function[0], bool(function[1]), code)
+            self._on_function(function[0], code)
             return
         if self._pending is not None:
             raise ParseError(
@@ -344,7 +344,7 @@ class _Parser:
         if self._depth <= 0:
             self._loose.append((number, stripped))
 
-    def _on_function(self, name: str, opened: bool, code: str) -> None:
+    def _on_function(self, name: str, code: str) -> None:
         self._depth += _brace_delta(code)
         self.functions.add(name)
         block = self._pending
@@ -509,7 +509,7 @@ class _Parser:
                 block.attr_line("filters"),
             )
         if kind in ("number", "slider"):
-            self._check_numeric_default(block, kind, default, minimum, maximum)
+            self._check_numeric_default(block, default, minimum, maximum)
         if kind == "date" and default:
             if not is_valid_date(default):
                 self._error(
@@ -646,7 +646,6 @@ class _Parser:
     def _check_numeric_default(
         self,
         block: _Block,
-        kind: str,
         default: str | None,
         minimum: str | None,
         maximum: str | None,
@@ -747,7 +746,6 @@ class _Parser:
         return steps
 
     def _build_step(self, block: _Block) -> Step:
-        path = self.path
         function = (block.get("function") or block.id).strip()
         defined = block.attrs.get("__defined__")
         if function == block.id and defined is not None and defined != block.id:
@@ -764,7 +762,7 @@ class _Parser:
         title = _unquote((block.get("title") or block.id).strip())
         group = block.get("group")
         group = _unquote(group.strip()) if group else None
-        depends_raw = block.get("depends", "")
+        depends_raw = block.get("depends") or ""
         depends = tuple(
             item for item in (part.strip() for part in depends_raw.split(",")) if item
         )
