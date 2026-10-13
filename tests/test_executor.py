@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from fixtures.paths import DEV_SETUP, HELPERS
 
-from rt.core.errors import PrecheckError
-from rt.core.events import (
+from kbash.core.errors import PrecheckError
+from kbash.core.events import (
     LogLine,
     Progress,
     PromptRequest,
@@ -21,11 +21,11 @@ from rt.core.events import (
     StepFinished,
     StepStarted,
 )
-from rt.core.executor import Executor, default_root_command
-from rt.core.ipc import IpcChannel
-from rt.core.model import RunState, StepState
-from rt.core.parser import parse_script
-from rt.core.planner import build_plan
+from kbash.core.executor import Executor, default_root_command
+from kbash.core.ipc import IpcChannel
+from kbash.core.model import RunState, StepState
+from kbash.core.parser import parse_script
+from kbash.core.planner import build_plan
 
 
 class Collector:
@@ -351,7 +351,7 @@ def test_precheck_required_option(dev_script) -> None:
 def test_precheck_root_does_not_block_while_elevation_is_disabled(dev_script) -> None:
     # Elevação desligada: mesmo com pkexec ausente nada impede o step root.
     monkey = pytest.MonkeyPatch()
-    monkey.setattr("rt.core.executor.shutil.which", lambda name: None)
+    monkey.setattr("kbash.core.executor.shutil.which", lambda name: None)
     try:
         executor = make(dev_script, ["update_index"], {"user_name": "Ana"})
         assert executor.precheck() == []
@@ -366,7 +366,7 @@ def test_precheck_empty_selection(dev_script) -> None:
 
 # -- root (§9.2, elevação desligada por enquanto) ----------------------------
 def test_privilege_elevation_is_disabled() -> None:
-    from rt.core import executor as module
+    from kbash.core import executor as module
 
     assert module.PRIVILEGE_ELEVATION is False
 
@@ -463,7 +463,7 @@ def test_ipc_cancel_prompt_ends_step_with_130(tmp_path: Path) -> None:
     def sink(event: object) -> None:
         collector(event)
         if isinstance(event, PromptRequest):
-            from rt.core.ipc import CANCEL
+            from kbash.core.ipc import CANCEL
 
             executor.ipc.respond(event.request_id, CANCEL)  # type: ignore[union-attr]
 

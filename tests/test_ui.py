@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from fixtures.paths import HELPERS
 
-from rt.core import ui
-from rt.core.ui import Answer, Prompt, TerminalUi, YesUi, available, create, register, select_name
+from kbash.core import ui
+from kbash.core.ui import Answer, Prompt, TerminalUi, YesUi, available, create, register, select_name
 
 CONFIRM = Prompt(id="r1", kind="confirm", text="Continuar?", default=False)
 CONFIRM_YES = Prompt(id="r2", kind="confirm", text="Continuar?", default=True)
@@ -90,8 +90,8 @@ def test_none_ui_cancels() -> None:
 
 # -- seleção (§8.5) ----------------------------------------------------------
 def test_select_name_precedence() -> None:
-    assert select_name("none", environ={"BASHRT_UI": "yes"}) == "none"
-    assert select_name(None, environ={"BASHRT_UI": "terminal"}) == "terminal"
+    assert select_name("none", environ={"KBASH_UI": "yes"}) == "none"
+    assert select_name(None, environ={"KBASH_UI": "terminal"}) == "terminal"
     assert select_name("auto", has_gui=True, environ={}) == "qt"
     assert select_name("auto", stdin=_FakeStdin(True), environ={}) == "terminal"
     assert select_name("auto", stdin=_FakeStdin(False), environ={}) == "yes"
@@ -135,11 +135,11 @@ class _FakeStdin:
 # -- a UI é do runtime, não de um programa externo (§8.5) --------------------
 def test_runtime_never_calls_an_external_dialog(tmp_path: Path) -> None:
     """A resposta vem do IPC interno; nenhum kdialog/zenity é executado."""
-    from rt.core.events import PromptRequest
-    from rt.core.executor import Executor
-    from rt.core.ipc import IpcChannel
-    from rt.core.parser import parse_script
-    from rt.core.planner import build_plan
+    from kbash.core.events import PromptRequest
+    from kbash.core.executor import Executor
+    from kbash.core.ipc import IpcChannel
+    from kbash.core.parser import parse_script
+    from kbash.core.planner import build_plan
 
     fake = tmp_path / "fake-ui"
     fake.write_text("#!/bin/sh\necho CHAMADO >> %s\n" % (tmp_path / "chamadas.log"), encoding="utf-8")
@@ -168,7 +168,7 @@ def test_runtime_never_calls_an_external_dialog(tmp_path: Path) -> None:
 
 
 def test_prompt_from_request_conversion() -> None:
-    from rt.core.events import PromptRequest
+    from kbash.core.events import PromptRequest
 
     event = PromptRequest(
         request_id="r9", kind="choice", label="Editor", default=["a"],
@@ -263,8 +263,8 @@ def test_terminal_ui_file_reads_path() -> None:
 
 
 def test_prompt_from_request_keeps_min_max() -> None:
-    from rt.core.events import PromptRequest
-    from rt.core.ui import Prompt as UiPrompt
+    from kbash.core.events import PromptRequest
+    from kbash.core.ui import Prompt as UiPrompt
 
     event = PromptRequest(request_id="r", kind="number", label="N", minimum="1", maximum="9")
     prompt = UiPrompt.from_request(event)

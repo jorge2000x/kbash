@@ -1,7 +1,7 @@
-# Portar um script bash para o BashRT
+# Portar um script bash para o kbash
 
 Guia prático: pegue um script bash que já funciona no terminal e transforme-o
-em um script anotado que o `rt` executa com interface gráfica. A referência
+em um script anotado que o `kbash` executa com interface gráfica. A referência
 completa do formato está no `SPEC.md`; aqui está o caminho para chegar lá.
 
 Um script anotado continua sendo bash válido. Você pode rodá-lo no terminal
@@ -11,7 +11,7 @@ com `bash script.sh`, e as anotações `#@...` são só comentários para o bash
 
 ## 1. Visão geral
 
-Um script comum faz tudo de uma vez, de cima para baixo. No BashRT o runtime
+Um script comum faz tudo de uma vez, de cima para baixo. No kbash o runtime
 é quem controla a execução: ele escolhe os **steps** (funções), pergunta as
 **opções** antes de começar e mostra o progresso. Então a conversão tem três
 movimentos:
@@ -149,7 +149,7 @@ dependências.
 Esta é a parte que mais muda. Os helpers abrem diálogos na GUI e, no terminal,
 caem no comportamento normal (SPEC §8.4).
 
-| No terminal | No BashRT |
+| No terminal | No kbash |
 |---|---|
 | `read -p "Nome: " nome` | `nome=$(rt_input "Nome" "$OPT_NOME")` |
 | `read -s -p "Senha: " senha` | `senha=$(rt_secret "Senha")` (nunca vai para o log) |
@@ -274,16 +274,16 @@ O que mudou:
 Confira com o runtime:
 
 ```bash
-rt check instalar.sh          # valida anotações, ids e referências
-rt plan instalar.sh --opt nome="Ana Silva"
-rt run --headless --yes --opt nome="Ana Silva" instalar.sh   # roda sem GUI
+kbash check instalar.sh          # valida anotações, ids e referências
+kbash plan instalar.sh --opt nome="Ana Silva"
+kbash run --headless --yes --opt nome="Ana Silva" instalar.sh   # roda sem GUI
 ```
 
 ---
 
 ## 9. Checklist antes de distribuir
 
-- [ ] `rt check` passa sem erros; os warnings foram lidos e aceitos.
+- [ ] `kbash check` passa sem erros; os warnings foram lidos e aceitos.
 - [ ] O topo do arquivo só tem definições (sem comandos soltos).
 - [ ] Cada `read`, `select`, `echo ... >&2` e `exit` foi trocado pelo helper certo.
 - [ ] Todo parâmetro de entrada virou `#@option`, com `required` quando for o caso.
@@ -291,7 +291,7 @@ rt run --headless --yes --opt nome="Ana Silva" instalar.sh   # roda sem GUI
 - [ ] Dependências entre steps estão em `#@depends`.
 - [ ] Nenhum `sudo` dentro dos steps; passos de root estão marcados com `#@root true`.
 - [ ] Senhas usam `rt_secret` ou `type=password`.
-- [ ] `rt run --headless --yes` com os valores de exemplo termina com código 0.
+- [ ] `kbash run --headless --yes` com os valores de exemplo termina com código 0.
 - [ ] A GUI foi aberta, e o fluxo foi testado de ponta a ponta, incluindo cancelar.
 
 Um script completo com todos os tipos de opção e de prompt está em

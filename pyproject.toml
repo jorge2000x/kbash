@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "rt"
+name = "kbash"
 version = "0.1.0"
 description = "Runtime de scripts com GUI Kirigami"
 readme = "SPEC.md"
@@ -16,12 +16,12 @@ gui = []
 dev = ["pytest>=7"]
 
 [project.scripts]
-rt = "rt.main:main"
+kbash = "kbash.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/rt"]
+packages = ["src/kbash"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-filterwarnings = ["error::DeprecationWarning:rt.*"]
+filterwarnings = ["error::DeprecationWarning:kbash.*"]

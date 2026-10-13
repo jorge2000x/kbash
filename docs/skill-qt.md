@@ -1,6 +1,6 @@
 # skill-qt.md — PySide6 + QML + Kirigami sem quebrar
 
-Guia operacional para manter a GUI do `rt` (e qualquer GUI PySide6/Kirigami
+Guia operacional para manter a GUI do `kbash` (e qualquer GUI PySide6/Kirigami
 parecida) **correta, bonita e consistente**. Cada regra aqui existe porque a
 regressão correspondente já aconteceu neste repositório ou foi verificada em
 runtime nesta máquina.
@@ -68,7 +68,7 @@ processo aborta.
 ## 2. Arquitetura: a regra das fachadas
 
 **Nenhuma tela toca um controle do Qt diretamente.** As quatro telas usam só
-tipos do módulo `BashRT`; botões, campos, combos, switches, cartões, diálogos e
+tipos do módulo `kbash`; botões, campos, combos, switches, cartões, diálogos e
 selos são as fachadas. Isso existe para trocar o toolkit inteiro sem reescrever
 as telas.
 
@@ -78,7 +78,7 @@ qml/
 ├── pages/                        ← módulo "pages" (qmldir obrigatório)
 │   ├── qmldir
 │   └── WelcomePage / SelectPage / RunPage / ResultPage
-└── kirigami/BashRT/              ← módulo "BashRT" — as fachadas
+└── kirigami/kbash/              ← módulo "kbash" — as fachadas
     ├── qmldir
     └── App*.qml, StepRow, StepBadge, OptionField, LogPanel, LogDrawer…
 ```
@@ -89,7 +89,7 @@ Três regras de módulo:
    instancia `WelcomePage {}` etc. pelo nome; um arquivo solto no import path
    não é encontrado. Por isso `pages/qmldir` existe.
 2. **Um import path por módulo.** `engine.addImportPath(qml/kirigami)` para
-   `BashRT`, `engine.addImportPath(qml/)` para `pages`. `qmldir` deve ficar
+   `kbash`, `engine.addImportPath(qml/)` para `pages`. `qmldir` deve ficar
    *dentro* da pasta do módulo.
 3. **Toda fachada declarada no `qmldir` precisa existir como arquivo** — e ser
    instanciável. Erro de import faltando (usar `Layout.*` sem importar
@@ -101,7 +101,7 @@ Três regras de módulo:
 | | Pode usar |
 |---|---|
 | **Tela** (`pages/`) | `App*`, `StepRow`, `OptionField`, `LogPanel`, `Label`, `RowLayout`, `Flow`, `Item` |
-| **Fachada** (`BashRT/`) | `Kirigami.*` quando existe; `QtQuick.Controls` para o resto |
+| **Fachada** (`kbash/`) | `Kirigami.*` quando existe; `QtQuick.Controls` para o resto |
 
 Exceção consciente: `ScrollView` + `TextArea` dentro de uma fachada é legítimo
 (a fachada existe justamente para esconder o controle). O que é proibido é a
@@ -726,7 +726,7 @@ O padrão correto é `pragma Singleton` declarado no `qmldir`:
 singleton Theme 1.0 Theme.qml
 ```
 ```qml
-import BashRT
+import kbash
 // Theme.smallFont, sem context property
 ```
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Exemplo do BashRT: instala ferramentas e configura o ambiente de development.
-# Roda de verdade: use `bashrt check examples/setup-dev.sh` antes.
+# Exemplo do kbash: instala ferramentas e configura o ambiente de development.
+# Roda de verdade: use `kbash check examples/setup-dev.sh` antes.
 #
 # Este script é seguro: nada é instalado no sistema. Ele escreve apenas dentro de
 # $RT_WORKDIR (um diretório temporário criado pelo runtime) e mostra todas as
@@ -9,7 +9,7 @@
 #@name Configurar ambiente de desenvolvimento
 #@description Instala ferramentas básicas e configura o git.
 #@version 1.0.0
-#@author Equipe BashRT
+#@author Equipe kbash
 #@icon applications-development
 
 #@option user_name type=string label="Nome para o git" required=true help="Usado no git config"

@@ -57,9 +57,9 @@ atacando o erro errado:
 
 ```sh
 # qual estilo foi escolhido e se o módulo está no bundle
-./sober-optimizer-x86_64.AppImage   # a GUI sobe; log em ~/.local/state/sober-optimizer/
+./kbash-x86_64.AppImage   # a GUI sobe; log em ~/.local/state/kbash/
 # forçar outro estilo
-QT_QUICK_CONTROLS_STYLE=Basic ./sober-optimizer-x86_64.AppImage
+QT_QUICK_CONTROLS_STYLE=Basic ./kbash-x86_64.AppImage
 ```
 
 Teste feito: janela `ApplicationWindow` do Breeze carrega com zero erros QML,
@@ -124,7 +124,7 @@ desmarcado vai a 60% (contraste ≥ 3:1), e o marcado/ligado é azul cheio com
 API pública: pode mudar entre versões do KDE. O caminho oficial para o azul
 cheio é o estilo `org.kde.desktop` (+8 a 10 MB estimados, não medidos).
 
-Diagnóstico: `RT_DEBUG_TEMA=1` grava no log (`~/.local/state/sober-optimizer/`)
+Diagnóstico: `RT_DEBUG_TEMA=1` grava no log (`~/.local/state/kbash/`)
 as cores que o Kirigami recebeu. (Este diagnóstico foi removido do código.)
 
 ### Tipografia e layout
@@ -170,7 +170,7 @@ constante.
 ```sh
 tools/build-icu-data.sh <trabalho> <trabalho>/libicudata.so.73.2
 ICU_DATA_SO=<trabalho>/libicudata.so.73.2 VENV=... DEBS=... BUILD=... \
-    tools/build-appimage.sh kmodifier saida.AppImage
+    tools/build-appimage.sh kbash saida.AppImage
 ```
 Sem `ICU_DATA_SO`, o build usa o ICU completo do wheel (32 MB) e segue funcionando.
 
@@ -183,7 +183,7 @@ Sem `ICU_DATA_SO`, o build usa o ICU completo do wheel (32 MB) e segue funcionan
 
 ### Stdlib (`tools/prune_stdlib.py`)
 
-O que fica é o fecho de imports de `rt/`, PySide6 e shiboken6, mais o que um
+O que fica é o fecho de imports de `kbash/`, PySide6 e shiboken6, mais o que um
 rastreio real de execução carregou (`tools/stdlib-trace.txt`, gerado por
 `tools/trace_stdlib.py` com CLI e GUI). `ctypes` e `unittest` saem: nenhum
 caminho testado os carrega. Se algum caminho não coberto precisar deles, o

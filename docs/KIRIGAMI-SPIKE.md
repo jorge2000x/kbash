@@ -1,7 +1,7 @@
 # Spike — empacotar o Kirigami dentro do bundle (SPEC.md §10.1, Fase 4)
 
 **Pergunta:** dá para levar o módulo QML do Kirigami e as suas bibliotecas junto
-com o bundle do BashRT, de forma que a interface KDE funcione numa máquina que não
+com o bundle do kbash, de forma que a interface KDE funcione numa máquina que não
 tem Kirigami instalado?
 
 **Resposta curta:** dá, e o custo é pequeno — mas **não é o caminho que escolhemos**.
@@ -32,7 +32,7 @@ meu-instalador/
     ├── qml/org/kde/kirigami/…      # copiado do sistema
     ├── lib/libKirigami.so.6
     ├── lib/libKirigamiPlatform.so.6
-    └── bashrt-launcher             # script que exporta as variáveis
+    └── kbash-launcher             # script que exporta as variáveis
 ```
 
 O launcher precisaria exportar, antes de exec do runtime:
@@ -91,9 +91,9 @@ Sem Kirigami na máquina, a suíte cobre o que dá:
 > **Nota de correção (2026-10):** `test_implementations_have_the_same_api` e
 > `test_forced_kirigami_falls_back_when_absent` foram removidos junto com a
 > fachada alternativa — não há duas implementações para comparar, nem fallback
-> para exercitar. `BASHRT_UI_KIT` também não existe mais: a seleção de
+> para exercitar. `KBASH_UI_KIT` também não existe mais: a seleção de
 > implementação saiu do código. Para validar de verdade, num desktop KDE real:
 
 ```sh
-rt run examples/setup-dev.sh
+kbash run examples/setup-dev.sh
 ```

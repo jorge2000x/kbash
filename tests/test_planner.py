@@ -8,9 +8,9 @@ import pytest
 from fixtures import text
 from fixtures.paths import DEV_SETUP
 
-from rt.core.errors import ValidationError
-from rt.core.parser import parse_text
-from rt.core.planner import (
+from kbash.core.errors import ValidationError
+from kbash.core.parser import parse_text
+from kbash.core.planner import (
     build_plan,
     can_uncheck,
     default_options,
@@ -258,7 +258,7 @@ def test_option_errors_pattern_minlen_maxlen() -> None:
 
 
 def test_option_visible_conditions() -> None:
-    from rt.core.planner import option_visible
+    from kbash.core.planner import option_visible
 
     source = (
         "#@runtime 1\n#@name T\n"

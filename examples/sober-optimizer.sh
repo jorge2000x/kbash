@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sober Optimizer v2 — reescrito para o BashRT atual.
+# Sober Optimizer v2 — reescrito para o kbash atual.
 #
 # O que mudou em relação à v1 de terminal puro:
 # - perfil, backup e FRM viraram opções tipadas do formulário (`#@option`):
@@ -10,7 +10,7 @@
 # - 4 steps encadeados (`depends`) em vez de 1 função gigante;
 # - cores e banner só no terminal (no app o log fica sem escapes ANSI).
 #
-# Roda sozinho no terminal E dentro do app `rt` (fallbacks embutidos).
+# Roda sozinho no terminal E dentro do app `kbash` (fallbacks embutidos).
 #@runtime 1
 #@name Sober Optimizer
 #@description Configura o Sober (Roblox): perfis prontos ou ajuste fino, com backup opcional.
@@ -37,7 +37,7 @@ if ! declare -F rt_confirm >/dev/null 2>&1; then
         # shellcheck disable=SC1090
         source "$_dir/rt.sh"
     else
-        echo "Faltam os helpers rt_*: execute com 'rt run $0'." >&2
+        echo "Faltam os helpers rt_*: execute com 'kbash run $0'." >&2
         exit 2
     fi
     unset _dir

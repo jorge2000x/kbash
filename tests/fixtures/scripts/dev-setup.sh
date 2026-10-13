@@ -4,7 +4,7 @@
 #@name Configurar ambiente de desenvolvimento
 #@description Instala ferramentas básicas e configura o git.
 #@version 1.0.0
-#@author Equipe BashRT
+#@author Equipe kbash
 
 #@option user_name type=string label="Nome para o git" required=true
 #@option editor type=choice label="Editor padrão" choices="vim,nano" default=nano

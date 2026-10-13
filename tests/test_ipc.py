@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from fixtures.paths import HELPERS
 
-from rt.core.ipc import (
+from kbash.core.ipc import (
     CANCEL,
     decode_response,
     encode_response,
@@ -21,7 +21,7 @@ from rt.core.ipc import (
     format_answer,
     unescape_value,
 )
-from rt.core.events import PromptRequest
+from kbash.core.events import PromptRequest
 
 TRICKY = [
     "aspas \" e barra \\",
@@ -180,11 +180,11 @@ def test_helper_syntax_is_valid() -> None:
 
 # -- transporte real: script fala com o runtime (§8.1) -----------------------
 def test_rt_set_reaches_next_step_via_ipc(tmp_path: Path) -> None:
-    from rt.core.events import LogLine
-    from rt.core.executor import Executor
-    from rt.core.ipc import IpcChannel
-    from rt.core.parser import parse_script
-    from rt.core.planner import build_plan
+    from kbash.core.events import LogLine
+    from kbash.core.executor import Executor
+    from kbash.core.ipc import IpcChannel
+    from kbash.core.parser import parse_script
+    from kbash.core.planner import build_plan
 
     script_path = tmp_path / "vars.sh"
     script_path.write_text(
@@ -211,7 +211,7 @@ def test_rt_set_reaches_next_step_via_ipc(tmp_path: Path) -> None:
 
 
 def test_runtime_dir_is_0700_and_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from rt.core.ipc import IpcChannel
+    from kbash.core.ipc import IpcChannel
 
     base = tmp_path / "runtime"
     base.mkdir()
@@ -229,8 +229,8 @@ def test_runtime_dir_is_0700_and_removed(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_secret_is_input_with_secret_flag() -> None:
     """§8.2 — rt_secret manda t="input" com secret=true (não existe t="secret")."""
-    from rt.core.events import PromptRequest
-    from rt.core.ipc import IpcChannel
+    from kbash.core.events import PromptRequest
+    from kbash.core.ipc import IpcChannel
 
     prompts: list[PromptRequest] = []
     channel = IpcChannel(Path("/tmp"), prompts.append, "teste-secret")
@@ -256,8 +256,8 @@ def test_secret_is_input_with_secret_flag() -> None:
 
 
 def test_unknown_message_with_id_gets_cancel() -> None:
-    from rt.core.events import LogLine
-    from rt.core.ipc import IpcChannel
+    from kbash.core.events import LogLine
+    from kbash.core.ipc import IpcChannel
 
     events: list[object] = []
     channel = IpcChannel(Path("/tmp"), events.append, "teste-desconhecido")
@@ -276,8 +276,8 @@ def test_new_prompt_kinds_reach_runtime() -> None:
     import threading
     import time
 
-    from rt.core.events import PromptRequest
-    from rt.core.ipc import IpcChannel
+    from kbash.core.events import PromptRequest
+    from kbash.core.ipc import IpcChannel
 
     cases = [
         ('rt_number "Tentativas" 3 1 10', "number"),
@@ -342,8 +342,8 @@ def test_progresswin_is_fire_and_forget() -> None:
     import threading
     import time
 
-    from rt.core.events import ProgressWin
-    from rt.core.ipc import IpcChannel
+    from kbash.core.events import ProgressWin
+    from kbash.core.ipc import IpcChannel
 
     events: list = []
     channel = IpcChannel(Path("/tmp"), events.append, "teste-progresswin")

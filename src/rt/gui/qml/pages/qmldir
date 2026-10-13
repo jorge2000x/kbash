@@ -1,8 +1,0 @@
-# Telas do BashRT (SPEC.md §10.2). São instanciadas por nome no StackLayout
-# de main.qml, por isso precisam ser um módulo — e não só arquivos no Loader.
-module pages
-
-WelcomePage 1.0 WelcomePage.qml
-SelectPage 1.0 SelectPage.qml
-RunPage 1.0 RunPage.qml
-ResultPage 1.0 ResultPage.qml

@@ -1,6 +1,6 @@
 name: AppImage
 
-# Gera dois AppImages do BashRT a cada push na main, a cada tag v* e sob demanda:
+# Gera dois AppImages do kbash a cada push na main, a cada tag v* e sob demanda:
 #   - embutido: já traz o script de exemplo (examples/sober-optimizer.sh) e abre direto nele;
 #   - limpo: sem script, abre na tela inicial (home) para escolher um arquivo.
 # Os arquivos saem como artefatos do run; em tags v* também vão para a Release.
@@ -26,10 +26,10 @@ jobs:
         include:
           - variant: embutido
             payload: examples/sober-optimizer.sh
-            out: BashRT-embutido-x86_64.AppImage
+            out: kbash-embutido-x86_64.AppImage
           - variant: limpo
             payload: ""
-            out: BashRT-limpo-x86_64.AppImage
+            out: kbash-limpo-x86_64.AppImage
 
     steps:
       - uses: actions/checkout@v4

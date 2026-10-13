@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from rt.core.errors import ValidationError
-from rt.core.model import is_allowed_link
-from rt.core.parser import parse_text
-from rt.core.planner import build_plan, default_options, option_errors, value_options
+from kbash.core.errors import ValidationError
+from kbash.core.model import is_allowed_link
+from kbash.core.parser import parse_text
+from kbash.core.planner import build_plan, default_options, option_errors, value_options
 
 SRC = """#!/usr/bin/env bash
 #@runtime 1

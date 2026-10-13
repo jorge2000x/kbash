@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from rt.cli import embedded_script, main
-from rt.core.model import placeholder_script
+from kbash.cli import embedded_script, main
+from kbash.core.model import placeholder_script
 
 SCRIPT = "#!/usr/bin/env bash\n#@runtime 1\n#@name Demo\n#@step a\na() { :; }\n"
 

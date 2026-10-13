@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rt.sh — helpers do BashRT injetados em cada step (SPEC.md §8.4).
+# rt.sh — helpers do kbash injetados em cada step (SPEC.md §8.4).
 #
 # Requisitos (SPEC.md §8.4):
 #   * bash puro: sem jq, python ou qualquer outra dependência externa;

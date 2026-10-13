@@ -1,4 +1,4 @@
-# kbash (BashRT)
+# kbash
 
 Runtime que executa scripts bash anotados com uma interface gráfica
 (Qt 6 / QML / Kirigami). Um script comum vira um formulário com opções
@@ -10,9 +10,9 @@ tipadas, etapas marcáveis e log ao vivo, sem reescrever a lógica.
 
 Uso rápido:
 
-    rt check examples/all-options.sh
-    rt run examples/all-options.sh          # abre a GUI
-    rt run --headless --yes examples/all-options.sh
-    rt home                                  # tela inicial com seletor de arquivo
+    kbash check examples/all-options.sh
+    kbash run examples/all-options.sh          # abre a GUI
+    kbash run --headless --yes examples/all-options.sh
+    kbash home                                  # tela inicial com seletor de arquivo
 
 Testes: `pytest` (com `dbus-run-session` para os testes de portal).

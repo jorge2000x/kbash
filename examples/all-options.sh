@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Exemplo do BashRT: exercita TODOS os tipos de opção (§4.3) e de prompt (§8.4).
+# Exemplo do kbash: exercita TODOS os tipos de opção (§4.3) e de prompt (§8.4).
 #
 # Seguro: só echo e mktemp; nada é instalado. Valide com:
-#   rt check examples/all-options.sh
+#   kbash check examples/all-options.sh
 # Rode sem GUI (responde tudo com os padrões):
-#   rt run --headless --yes examples/all-options.sh
+#   kbash run --headless --yes examples/all-options.sh
 #
 #@runtime 1
 #@name Todos os tipos de opção
 #@description Demonstração de todos os widgets e prompts do runtime.
 #@version 1.0.0
-#@author Equipe BashRT
+#@author Equipe kbash
 #@icon applications-development
 
 # -- texto e escolha ------------------------------------------------------
 #@option intro type=paragraph label="Este exemplo mostra todos os tipos de opção. Parágrafos e links só exibem: não geram OPT_*."
-#@option docs_link type=link label="Documentação do exemplo" url="https://example.org/bashrt"
+#@option docs_link type=link label="Documentação do exemplo" url="https://example.org/kbash"
 #@option user_name type=string label="Seu nome" required=true default="Ana Silva" pattern="^[a-zA-Z ]+$" minlen=2 maxlen=30 help="Só letras e espaços"
 #@option editor type=choice label="Editor" choices="vim,nano,micro" default=nano
 #@option plugins type=multi label="Plugins" choices="lua,python,git" default=lua

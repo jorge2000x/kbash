@@ -25,9 +25,9 @@ pytest.importorskip("PySide6", reason="GUI exige PySide6")
 from PySide6.QtCore import QCoreApplication, QUrl  # noqa: E402
 from PySide6.QtGui import QGuiApplication  # noqa: E402
 
-from rt.core.model import StepState  # noqa: E402
-from rt.gui.app import create_engine, qml_dir  # noqa: E402
-from rt.gui.models import LOG_BUFFER, LogModel  # noqa: E402
+from kbash.core.model import StepState  # noqa: E402
+from kbash.gui.app import create_engine, qml_dir  # noqa: E402
+from kbash.gui.models import LOG_BUFFER, LogModel  # noqa: E402
 
 #: Valores mínimos para instanciar cada fachada num smoke test.
 #: Valores mínimos (expressões QML) para instanciar cada fachada no smoke test.
@@ -77,7 +77,7 @@ def _smoke_qml(names: Sequence[str]) -> str:
             f"\n        {key}: {value}" for key, value in _FACADE_DEFAULTS.get(name, {}).items()
         )
         body += f"\n    {name} {{{properties}\n    }}"
-    return f"import QtQuick\nimport BashRT\n\nItem {{{body}\n}}\n"
+    return f"import QtQuick\nimport kbash\n\nItem {{{body}\n}}\n"
 
 
 LONG_SCRIPT = """\
@@ -154,10 +154,10 @@ def test_main_window_loads(gui) -> None:
 
 
 def test_qml_module_is_declared() -> None:
-    qmldir = qml_dir() / "kirigami" / "BashRT" / "qmldir"
+    qmldir = qml_dir() / "kirigami" / "kbash" / "qmldir"
     assert qmldir.is_file()
     text = qmldir.read_text(encoding="utf-8")
-    assert "module BashRT" in text
+    assert "module kbash" in text
     for component in ("AppPage", "AppButton", "AppCard", "AppDialog", "PromptDialog"):
         assert f"{component} 1.0" in text, component
 
@@ -364,7 +364,7 @@ def test_theme_follows_the_system_palette(app) -> None:
     from PySide6.QtGui import QColor
     from PySide6.QtQml import QQmlEngine
 
-    from rt.gui.app import _create_theme
+    from kbash.gui.app import _create_theme
 
     engine = QQmlEngine()
     theme = _create_theme(engine, "kirigami")
@@ -605,7 +605,7 @@ def test_run_steps_lists_only_checked(gui) -> None:
 
 def test_run_crash_goes_to_result(gui) -> None:
     """Crash do executor vai ao resultado como falha, não à seleção."""
-    from rt.gui.bridge import PAGE_RESULT, _RunCrashed
+    from kbash.gui.bridge import PAGE_RESULT, _RunCrashed
 
     _app, _engine, _roots, bridge = gui
     bridge._apply(_RunCrashed("falha interna na execução: boom"))
@@ -646,7 +646,7 @@ def test_shutdown_is_idempotent_and_fast(gui) -> None:
 
 def test_start_rolls_back_when_executor_fails(app, tmp_path: Path, monkeypatch) -> None:
     """Se o Executor falhar, a GUI não fica presa em Executando."""
-    import rt.gui.bridge as bridge_module
+    import kbash.gui.bridge as bridge_module
 
     script = tmp_path / "boom.sh"
     script.write_text(
@@ -709,7 +709,7 @@ def test_quit_is_safe_without_run(gui) -> None:
 # -- Fase 4: só Kirigami (§10.1, §3 regra 5) --------------------------------
 def test_facade_declares_its_api() -> None:
     """Os tipos do qmldir precisam existir como arquivo (§3 regra 5)."""
-    folder = qml_dir() / "kirigami" / "BashRT"
+    folder = qml_dir() / "kirigami" / "kbash"
     declared = {
         line.split()[0]
         for line in (folder / "qmldir").read_text(encoding="utf-8").splitlines()
@@ -726,7 +726,7 @@ def test_pages_only_use_facades() -> None:
 
     for page in (qml_dir() / "pages").glob("*.qml"):
         source = page.read_text(encoding="utf-8")
-        assert "import BashRT" in source, page.name
+        assert "import kbash" in source, page.name
         controls = set(re.findall(r"^\s*(\w+)\s*\{", source, re.MULTILINE))
         forbidden = controls & {
             "Button", "TextField", "TextArea", "TextEdit", "CheckBox", "RadioButton",
@@ -748,7 +748,7 @@ def test_missing_kirigami_fails_loudly(app, tmp_path: Path, monkeypatch) -> None
         "#!/usr/bin/env bash\n#@runtime 1\n#@name Kit\n#@step ola\nola() { echo oi; }\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("rt.gui.app.kirigami_available", lambda *a, **k: False)
+    monkeypatch.setattr("kbash.gui.app.kirigami_available", lambda *a, **k: False)
     with pytest.raises(RuntimeError, match="Kirigami indisponível"):
         create_engine(script)
 
@@ -777,9 +777,9 @@ def test_kirigami_facade_is_syntactically_valid(app) -> None:
     """Sem Kirigami instalado não dá para instanciar, mas o QML precisa compilar."""
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
-    from rt.gui.app import qml_dir
+    from kbash.gui.app import qml_dir
 
-    folder = qml_dir() / "kirigami" / "BashRT"
+    folder = qml_dir() / "kirigami" / "kbash"
     engine = QQmlEngine()
     engine.addImportPath(str(qml_dir() / "kirigami"))
     broken: list[str] = []
@@ -806,7 +806,7 @@ def test_every_facade_instantiates(app, tmp_path: Path) -> None:
     """
     from PySide6.QtQml import QQmlComponent
 
-    from rt.gui.app import qml_dir
+    from kbash.gui.app import qml_dir
 
     script = tmp_path / "smoke.sh"
     script.write_text(
@@ -818,7 +818,7 @@ def test_every_facade_instantiates(app, tmp_path: Path) -> None:
     context = _engine.rootContext()
     bridge = context.contextProperty("bridge")
     theme = context.contextProperty("theme")
-    folder = qml_dir() / "kirigami" / "BashRT"
+    folder = qml_dir() / "kirigami" / "kbash"
     declared = [
         line.split()[0]
         for line in (folder / "qmldir").read_text(encoding="utf-8").splitlines()
@@ -848,10 +848,10 @@ def test_confirm_dialog_answers_no_without_cancelling(app, tmp_path: Path) -> No
     """
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
-    from rt.core.parser import parse_script
-    from rt.core.ui import CANCEL_SENTINEL
-    from rt.gui.app import _create_theme, kirigami_available, qml_dir
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.core.ui import CANCEL_SENTINEL
+    from kbash.gui.app import _create_theme, kirigami_available, qml_dir
+    from kbash.gui.bridge import Bridge
 
     if not kirigami_available():
         pytest.skip("sem Kirigami nesta máquina")
@@ -872,7 +872,7 @@ def test_confirm_dialog_answers_no_without_cancelling(app, tmp_path: Path) -> No
     theme.setParent(engine)
 
     component = QQmlComponent(
-        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "BashRT" / "PromptDialog.qml"))
+        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "kbash" / "PromptDialog.qml"))
     )
     dialog = component.create()
     assert dialog is not None, [error.toString() for error in component.errors()]
@@ -947,9 +947,9 @@ def test_prompt_choice_delegates_show_text(app, tmp_path: Path) -> None:
     from PySide6.QtQuick import QQuickItem
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
-    from rt.core.parser import parse_script
-    from rt.gui.app import _create_theme, kirigami_available, qml_dir
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.app import _create_theme, kirigami_available, qml_dir
+    from kbash.gui.bridge import Bridge
 
     kit = "kirigami"
     if not kirigami_available():
@@ -969,7 +969,7 @@ def test_prompt_choice_delegates_show_text(app, tmp_path: Path) -> None:
     bridge.setParent(engine)
     theme.setParent(engine)
     component = QQmlComponent(
-        engine, QUrl.fromLocalFile(str(qml_dir() / kit / "BashRT" / "PromptDialog.qml"))
+        engine, QUrl.fromLocalFile(str(qml_dir() / kit / "kbash" / "PromptDialog.qml"))
     )
     dialog = component.create()
     assert dialog is not None, [error.toString() for error in component.errors()]
@@ -1024,8 +1024,8 @@ def test_resolve_consumes_pending(app) -> None:
     """Resposta repetida para o mesmo id é ignorada (§8.5)."""
     import threading
 
-    from rt.core.ui import Prompt
-    from rt.gui.ui_qt import QtUi
+    from kbash.core.ui import Prompt
+    from kbash.gui.ui_qt import QtUi
 
     ui = QtUi()
     prompt = Prompt(id="r1", kind="confirm", text="?", default=True)
@@ -1046,9 +1046,9 @@ def test_choice_empty_value_selects_nothing(app, tmp_path: Path) -> None:
     from PySide6.QtQuick import QQuickItem
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
-    from rt.core.parser import parse_script
-    from rt.gui.app import _create_theme, kirigami_available, qml_dir
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.app import _create_theme, kirigami_available, qml_dir
+    from kbash.gui.bridge import Bridge
 
     if not kirigami_available():
         pytest.skip("sem Kirigami nesta máquina")
@@ -1067,7 +1067,7 @@ def test_choice_empty_value_selects_nothing(app, tmp_path: Path) -> None:
     bridge.setParent(engine)
     theme.setParent(engine)
     component = QQmlComponent(
-        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "BashRT" / "OptionField.qml"))
+        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "kbash" / "OptionField.qml"))
     )
     _KEEPALIVE.append((engine, bridge, theme, component))
     field = component.create()
@@ -1171,9 +1171,9 @@ def _option_field(app, tmp_path: Path, **props: object):
     from PySide6.QtQuick import QQuickItem
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
-    from rt.core.parser import parse_script
-    from rt.gui.app import _create_theme, kirigami_available, qml_dir
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.app import _create_theme, kirigami_available, qml_dir
+    from kbash.gui.bridge import Bridge
 
     if not kirigami_available():
         pytest.skip("sem Kirigami nesta máquina")
@@ -1192,7 +1192,7 @@ def _option_field(app, tmp_path: Path, **props: object):
     bridge.setParent(engine)
     theme.setParent(engine)
     component = QQmlComponent(
-        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "BashRT" / "OptionField.qml"))
+        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "kbash" / "OptionField.qml"))
     )
     _KEEPALIVE.append((engine, bridge, theme, component))
     field = component.create()
@@ -1329,9 +1329,9 @@ def _prompt_dialog(app, tmp_path: Path, **props: object):
     from PySide6.QtQuick import QQuickItem
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
-    from rt.core.parser import parse_script
-    from rt.gui.app import _create_theme, kirigami_available, qml_dir
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.app import _create_theme, kirigami_available, qml_dir
+    from kbash.gui.bridge import Bridge
 
     if not kirigami_available():
         pytest.skip("sem Kirigami nesta máquina")
@@ -1350,7 +1350,7 @@ def _prompt_dialog(app, tmp_path: Path, **props: object):
     bridge.setParent(engine)
     theme.setParent(engine)
     component = QQmlComponent(
-        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "BashRT" / "PromptDialog.qml"))
+        engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "kbash" / "PromptDialog.qml"))
     )
     _KEEPALIVE.append((engine, bridge, theme, component))
     dialog = component.create()
@@ -1479,7 +1479,7 @@ def test_progresswin_dialog_follows_events(app, tmp_path: Path) -> None:
     """Janela de progresso do script (§8.4): eventos abrem/atualizam/fecham."""
     from PySide6.QtCore import QObject
 
-    from rt.core.events import ProgressWin
+    from kbash.core.events import ProgressWin
 
     script = tmp_path / "pwin.sh"
     script.write_text(
@@ -1564,8 +1564,8 @@ def test_portal_without_bus_fails_gracefully(app, tmp_path: Path, monkeypatch) -
     """Sem session bus, o pick avisa e devolve vazio — sem travar (§10.1)."""
     from PySide6.QtDBus import QDBusConnection
 
-    from rt.core.parser import parse_script
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.bridge import Bridge
 
     class _DeadBus:
         def isConnected(self) -> bool:
@@ -1595,8 +1595,8 @@ def test_portal_without_bus_fails_gracefully(app, tmp_path: Path, monkeypatch) -
 
 def test_portal_response_converts_uris(app, tmp_path: Path) -> None:
     """Resposta do portal vira caminhos locais no filePicked (§10.1)."""
-    from rt.core.parser import parse_script
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.bridge import Bridge
 
     script = tmp_path / "portal2.sh"
     script.write_text(
@@ -1620,8 +1620,8 @@ def test_portal_response_converts_uris(app, tmp_path: Path) -> None:
 
 def test_portal_call_failure_is_graceful(app, tmp_path: Path) -> None:
     """Falha na chamada assíncrona ao portal: aviso + vazio, sem travar (§10.1)."""
-    from rt.core.parser import parse_script
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.bridge import Bridge
 
     script = tmp_path / "portal3.sh"
     script.write_text(
@@ -1661,9 +1661,9 @@ def test_portal_full_loop_without_ui(app, tmp_path: Path, monkeypatch) -> None:
     """
     from PySide6.QtDBus import QDBusMessage, QDBusObjectPath
 
-    import rt.gui.bridge as bmod
-    from rt.core.parser import parse_script
-    from rt.gui.bridge import Bridge
+    import kbash.gui.bridge as bmod
+    from kbash.core.parser import parse_script
+    from kbash.gui.bridge import Bridge
 
     PATH = "/org/test/fakereq9"
     monkeypatch.setattr(bmod, "_portal_service_available", lambda: True)
@@ -1726,9 +1726,9 @@ def test_portal_response_uint32_reaches_slot_over_bus(app, tmp_path: Path, monke
 
     from PySide6.QtDBus import QDBusMessage, QDBusObjectPath
 
-    import rt.gui.bridge as bmod
-    from rt.core.parser import parse_script
-    from rt.gui.bridge import Bridge
+    import kbash.gui.bridge as bmod
+    from kbash.core.parser import parse_script
+    from kbash.gui.bridge import Bridge
 
     if shutil.which("gdbus") is None:
         pytest.skip("gdbus indisponível: sem barramento para o teste")
@@ -1810,8 +1810,8 @@ def test_option_link_renders_button_with_label(app, tmp_path: Path) -> None:
 def test_bridge_open_link_accepts_only_http_and_https(app, tmp_path: Path, monkeypatch) -> None:
     from PySide6.QtGui import QDesktopServices
 
-    from rt.core.parser import parse_script
-    from rt.gui.bridge import Bridge
+    from kbash.core.parser import parse_script
+    from kbash.gui.bridge import Bridge
 
     opened: list[str] = []
     monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: opened.append(url.toString()) or True)
@@ -1831,7 +1831,7 @@ def test_bridge_open_link_accepts_only_http_and_https(app, tmp_path: Path, monke
 
 
 def test_home_bridge_has_no_script_and_refuses_to_run(app, tmp_path: Path) -> None:
-    from rt.gui.bridge import Bridge
+    from kbash.gui.bridge import Bridge
 
     bridge = Bridge()
     assert bridge.hasScript is False
@@ -1841,7 +1841,7 @@ def test_home_bridge_has_no_script_and_refuses_to_run(app, tmp_path: Path) -> No
 
 
 def test_bridge_loads_a_script_chosen_by_path_or_file_url(app, tmp_path: Path) -> None:
-    from rt.gui.bridge import Bridge
+    from kbash.gui.bridge import Bridge
 
     script = tmp_path / "demo.sh"
     script.write_text(
@@ -1857,8 +1857,25 @@ def test_bridge_loads_a_script_chosen_by_path_or_file_url(app, tmp_path: Path) -
     assert bridge.loadScript(script.as_uri()) is True  # o arrastar entrega file://
 
 
+def test_bridge_accepts_kbash_and_sh_extensions(app, tmp_path: Path) -> None:
+    """`.kbash` é a extensão do programa; `.sh` continua sendo aceita (sem diferença)."""
+    from kbash.gui.bridge import Bridge
+
+    body = "#!/usr/bin/env bash\n#@runtime 1\n#@name Demo\n#@step a\na() { :; }\n"
+    kb = tmp_path / "demo.kbash"
+    kb.write_text(body, encoding="utf-8")
+    sh = tmp_path / "demo.sh"
+    sh.write_text(body, encoding="utf-8")
+    upper = tmp_path / "DEMO.KBASH"
+    upper.write_text(body, encoding="utf-8")
+    bridge = Bridge()
+    assert bridge.loadScript(str(kb)) is True
+    assert bridge.loadScript(str(sh)) is True
+    assert bridge.loadScript(str(upper)) is True
+    bridge.shutdown()
+
 def test_bridge_load_refuses_wrong_or_broken_files(app, tmp_path: Path) -> None:
-    from rt.gui.bridge import Bridge
+    from kbash.gui.bridge import Bridge
 
     bridge = Bridge()
     notes = []

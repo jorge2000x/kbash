@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from fixtures.paths import DEV_SETUP, FAILING, HELPERS
 
-from rt.cli import main
+from kbash.cli import main
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -22,7 +22,7 @@ def run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Complet
     environment = dict(os.environ, PYTHONPATH=str(SRC), QT_QPA_PLATFORM="offscreen")
     environment.update(env or {})
     return subprocess.run(
-        [sys.executable, "-m", "rt.cli", *args],
+        [sys.executable, "-m", "kbash.cli", *args],
         capture_output=True,
         text=True,
         env=environment,
@@ -34,7 +34,7 @@ def run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Complet
 
 def test_check_sober_example_is_clean() -> None:
     """O exemplo convertido passa sem erros (warnings heurísticos ok)."""
-    from rt.core.parser import check_script
+    from kbash.core.parser import check_script
 
     script, diagnostics = check_script(ROOT / "examples" / "sober-optimizer.sh")
     assert script is not None
@@ -158,7 +158,7 @@ def test_run_headless_continue() -> None:
 
 
 def test_run_headless_password_is_not_printed() -> None:
-    script = Path("/tmp/bashrt-cli-secret.sh")
+    script = Path("/tmp/kbash-cli-secret.sh")
     script.write_text(
         "#!/usr/bin/env bash\n#@runtime 1\n#@name Segredo\n"
         "#@option token type=password label=\"Token\"\n"
@@ -196,13 +196,13 @@ def test_run_headless_yes_flag() -> None:
 
 def test_run_headless_env_selects_ui() -> None:
     result = run_cli("run", str(DEV_SETUP), "--headless", "--select", "config_git",
-                     "--opt", "user_name=Ana", env={"BASHRT_UI": "yes"})
+                     "--opt", "user_name=Ana", env={"KBASH_UI": "yes"})
     assert result.returncode == 0
     assert "assinatura desativada" in result.stdout
 
 
 def test_run_headless_reports_precheck() -> None:
-    script = Path("/tmp/bashrt-cli-req.sh")
+    script = Path("/tmp/kbash-cli-req.sh")
     script.write_text(
         "#!/usr/bin/env bash\n#@runtime 1\n#@name Req\n#@requires comando_que_nao_existe\n"
         "#@step ola\nola() { echo oi; }\n",

@@ -7,4 +7,4 @@ from pathlib import Path
 FIXTURES = Path(__file__).resolve().parent / "scripts"
 DEV_SETUP = FIXTURES / "dev-setup.sh"
 FAILING = FIXTURES / "failing.sh"
-HELPERS = Path(__file__).resolve().parents[2] / "src" / "rt" / "helpers" / "rt.sh"
+HELPERS = Path(__file__).resolve().parents[2] / "src" / "kbash" / "helpers" / "rt.sh"

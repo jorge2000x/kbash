@@ -4,7 +4,7 @@
     python3 prune_stdlib.py <AppDir> [--trace arquivo.txt] [--dry-run]
 
 Módulos mantidos = união de três fontes:
-  1. imports estáticos (AST) de rt/, PySide6/ e shiboken6/ — e, a partir deles,
+  1. imports estáticos (AST) de kbash/, PySide6/ e shiboken6/ — e, a partir deles,
      os imports dos módulos do stdlib que eles usam (fecho transitivo);
   2. o rastreio de uma execução real (--trace), gerado por tools/trace_stdlib.py
      — cobre imports feitos em C ou por string (importlib), que a análise
@@ -66,9 +66,9 @@ def main() -> int:
     site = std / "site-packages"
     dyn = std / "lib-dynload"
 
-    # 1. imports estáticos de rt/ e dos pacotes Python do bundle
+    # 1. imports estáticos de kbash/ e dos pacotes Python do bundle
     alvo = []
-    alvo += list((app / "rt").rglob("*.py"))
+    alvo += list((app / "kbash").rglob("*.py"))
     alvo += list((site / "PySide6").rglob("*.py"))
     alvo += list((site / "shiboken6").rglob("*.py"))
     nomes = set(SEEDS)

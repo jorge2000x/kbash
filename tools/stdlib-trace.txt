@@ -91,7 +91,7 @@ queue
 random
 re
 reprlib
-rt
+kbash
 select
 selectors
 shiboken6

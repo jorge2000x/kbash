@@ -1,0 +1,339 @@
+"""Transporte de interação runtime ↔ script (SPEC.md §8.1–§8.3).
+
+Dois FIFOs por execução, num diretório ``0700`` (§8.1):
+
+* ``out`` — script → runtime, uma mensagem JSON por linha;
+* ``in``  — runtime → script, ``<id>\\t<status>\\t<valor>``.
+
+O runtime abre os dois com ``O_RDWR`` para que nenhuma ponta veja EOF nem
+bloqueie na abertura. Usamos caminho (e não FDs herdados) porque ``pkexec``
+não repassa descritores extras (§8.1).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import threading
+import time
+from pathlib import Path
+from typing import Any
+
+from .errors import KbashError
+from .events import EventSink, LogLine, Notify, Progress, ProgressWin, PromptRequest
+
+__all__ = [
+    "IpcChannel",
+    "IpcError",
+    "CANCEL",
+    "escape_value",
+    "unescape_value",
+    "encode_response",
+    "decode_response",
+    "PROMPT_KINDS",
+    "STATUS_OK",
+    "STATUS_CANCEL",
+]
+
+PROMPT_KINDS = ("confirm", "input", "choice", "number", "date", "time", "file", "text", "textbox")
+STATUS_OK = "ok"
+STATUS_CANCEL = "cancel"
+
+#: Valor que a GUI/CLI devolve para abortar um prompt (§7.4).
+CANCEL = "\x00cancel"
+
+
+class IpcError(KbashError):
+    """Falha no transporte de interação."""
+
+
+# ---------------------------------------------------------------------------
+# §8.3 — codificação das respostas runtime → script
+# ---------------------------------------------------------------------------
+def escape_value(value: str) -> str:
+    """``\\`` → ``\\\\``, quebra de linha → ``\\n``, TAB → ``\\t``."""
+    return value.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
+
+
+def unescape_value(value: str) -> str:
+    """Inverso de :func:`escape_value` (o helper usa ``printf '%b'``)."""
+    out: list[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char == "\\" and index + 1 < len(value):
+            nxt = value[index + 1]
+            out.append({"n": "\n", "t": "\t", "r": "\r", "\\": "\\"}.get(nxt, "\\" + nxt))
+            index += 2
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def encode_response(request_id: str, status: str, value: str) -> bytes:
+    """§8.3 — ``<id>\\t<status>\\t<valor>`` + quebra de linha."""
+    line = f"{request_id}\t{status}\t{escape_value(value)}"
+    return (line[:4000] + "\n").encode("utf-8")
+
+
+def decode_response(raw: bytes | str) -> tuple[str, str, str]:
+    """Inverso de :func:`encode_response` (usado nos testes do protocolo)."""
+    text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+    parts = text.rstrip("\n").split("\t", 2)
+    while len(parts) < 3:
+        parts.append("")
+    request_id, status, value = parts
+    return request_id, status, unescape_value(value)
+
+
+def format_answer(event: PromptRequest, value: Any) -> tuple[str, str]:
+    """Converte a resposta da GUI/terminal no par ``(status, valor)`` (§8.3)."""
+    if isinstance(value, str) and value == CANCEL:
+        return STATUS_CANCEL, ""
+    if event.kind == "confirm":
+        truthy = (
+            value.strip().lower() in ("1", "true", "yes", "y", "s", "sim", "on")
+            if isinstance(value, str)
+            else bool(value)
+        )
+        return STATUS_OK, "yes" if truthy else "no"
+    if event.kind == "choice" and event.multi:
+        if isinstance(value, (list, tuple)):
+            return STATUS_OK, "\n".join(str(item) for item in value)
+        return STATUS_OK, str(value)
+    if value is None:
+        return STATUS_OK, ""
+    return STATUS_OK, str(value)
+
+
+# ---------------------------------------------------------------------------
+# Canal
+# ---------------------------------------------------------------------------
+class _Pending:
+    __slots__ = ("event", "done")
+
+    def __init__(self, event: PromptRequest) -> None:
+        self.event = event
+        self.done = threading.Event()
+
+
+class IpcChannel:
+    """Fifos da execução (§8.1). Usado pelo executor via ``ipc_factory``."""
+
+    def __init__(self, workdir: Path, emit: EventSink, owner: str = "") -> None:
+        self.workdir = Path(workdir)
+        self.step_id = ""
+        #: Preenchido pelo executor com o mesmo dict que ele injeta no ambiente (§7.2).
+        self.variables: dict[str, str] = {}
+        self._emit = emit
+        self._processed = 0  # mensagens já lidas (usado por settle)
+        self._pending: dict[str, _Pending] = {}
+        self._lock = threading.RLock()
+        self._closed = False
+        self._directory = self._make_dir(owner)
+        self.out_path = self._directory / "out"
+        self.in_path = self._directory / "in"
+        for path in (self.out_path, self.in_path):
+            if path.exists():
+                path.unlink()
+            os.mkfifo(path, 0o600)
+        # §8.1 — O_RDWR evita bloqueio na abertura e EOF em nenhum dos lados.
+        self._out_fd = os.open(self.out_path, os.O_RDWR | os.O_NONBLOCK)
+        self._in_fd = os.open(self.in_path, os.O_RDWR | os.O_NONBLOCK)
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+
+    @property
+    def directory(self) -> Path:
+        return self._directory
+
+    # -- ciclo de vida --------------------------------------------------
+    @staticmethod
+    def _make_dir(owner: str) -> Path:
+        base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")
+        base.mkdir(parents=True, exist_ok=True)
+        ipc_dir = base / (owner or f"kbash-{os.getpid()}")
+        ipc_dir.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(ipc_dir, 0o700)
+        return ipc_dir
+
+    def close(self) -> None:
+        """§7.4 — prompts pendentes recebem ``cancel`` ao encerrar."""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            pending = list(self._pending.values())
+            self._pending.clear()
+        for item in pending:
+            self._write(item.event.request_id, STATUS_CANCEL, "")
+            item.done.set()
+        self._reader.join(timeout=2.0)
+        for fd in (self._out_fd, self._in_fd):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        for path in (self.out_path, self.in_path):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        try:
+            self._directory.rmdir()
+        except OSError:
+            pass
+
+    def __enter__(self) -> "IpcChannel":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    # -- escrita (runtime → script) --------------------------------------
+    def _write(self, request_id: str, status: str, value: str) -> None:
+        payload = encode_response(request_id, status, value)
+        view = memoryview(payload)
+        while view:
+            try:
+                view = view[os.write(self._in_fd, view) :]
+            except BlockingIOError:
+                threading.Event().wait(0.01)
+            except OSError as exc:
+                raise IpcError(f"falha ao responder no FIFO: {exc}") from exc
+
+    def respond(self, request_id: str, value: Any = CANCEL) -> None:
+        """Responde um :class:`PromptRequest` e libera o script."""
+        with self._lock:
+            item = self._pending.pop(request_id, None)
+        if item is None:
+            return
+        status, raw = format_answer(item.event, value)
+        self._write(request_id, status, raw)
+        item.done.set()
+
+    def settle(self, max_wait: float = 0.5) -> None:
+        """Espera o que já chegou no FIFO ser processado.
+
+        Chamado entre dois steps: sem isso, um ``rt_set`` do step que acabou
+        poderia ser lido só depois do próximo step já ter recebido o ambiente
+        (§7.2 — ``RT_VAR_<KEY>``).
+        """
+        deadline = time.monotonic() + max_wait
+        last = self._processed
+        quiet = 0.0
+        while time.monotonic() < deadline and quiet < 0.05:
+            time.sleep(0.01)
+            if self._processed != last:
+                last = self._processed
+                quiet = 0.0
+            else:
+                quiet += 0.01
+
+    # -- leitura (script → runtime) --------------------------------------
+    def _read_loop(self) -> None:
+        buffer = b""
+        while not self._closed:
+            try:
+                chunk = os.read(self._out_fd, 65536)
+            except BlockingIOError:
+                threading.Event().wait(0.02)
+                continue
+            except OSError:
+                break
+            if not chunk:
+                threading.Event().wait(0.02)
+                continue
+            buffer += chunk
+            while b"\n" in buffer:
+                line, _, buffer = buffer.partition(b"\n")
+                self._handle_line(line)
+        if buffer.strip():
+            self._handle_line(buffer)
+
+    def _handle_line(self, raw: bytes) -> None:
+        self._processed += 1
+        text = raw.decode("utf-8", errors="replace").strip()
+        if not text:
+            return
+        try:
+            message = json.loads(text)
+        except json.JSONDecodeError:
+            self._emit(LogLine(None, "kbash", f"mensagem IPC inválida: {text[:120]}", "warn"))
+            return
+        if not isinstance(message, dict):
+            return
+        kind = str(message.get("t", ""))
+        if kind == "progress":
+            value = message.get("value")
+            self._emit(Progress(self.step_id or None, None if value is None else float(value),
+                                str(message.get("text", ""))))
+        elif kind == "notify":
+            self._emit(Notify(str(message.get("text", ""))))
+        elif kind == "progresswin":
+            op = str(message.get("op", ""))
+            if op not in ("start", "update", "done"):
+                op = "update"
+            try:
+                value = float(message.get("value", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                value = 0.0
+            maximum: float | None = None
+            if "max" in message:
+                try:
+                    maximum = float(message.get("max") or 0.0) or None
+                except (TypeError, ValueError):
+                    maximum = None
+            self._emit(ProgressWin(op, value, maximum,
+                                   str(message.get("text", "")), self.step_id or None))
+        elif kind == "log":
+            self._emit(LogLine(self.step_id or None, "kbash", str(message.get("text", "")),
+                               str(message.get("level", "info"))))
+        elif kind == "fail":
+            text = str(message.get("text", "falha reportada pelo script"))
+            self._emit(LogLine(self.step_id or None, "kbash", text, "error"))
+            self._emit(Notify(text, "error"))
+        elif kind == "set":
+            self.variables[str(message.get("key", ""))] = str(message.get("value", ""))
+        elif kind in PROMPT_KINDS:
+            self._dispatch(kind, message)
+        elif str(message.get("id", "")):
+            # Mensagem com id que não conhecemos: responde cancel para o script
+            # não ficar esperando para sempre (§7.4).
+            self._write(str(message["id"]), STATUS_CANCEL, "")
+            self._emit(
+                LogLine(self.step_id or None, "kbash", f"mensagem IPC ignorada: t={kind!r}", "warn")
+            )
+        else:
+            self._emit(LogLine(None, "kbash", f"mensagem IPC desconhecida: t={kind!r}", "warn"))
+
+    def _dispatch(self, kind: str, message: dict[str, Any]) -> None:
+        request_id = str(message.get("id", ""))
+        choices = tuple(str(item) for item in message.get("choices", ()) or ())
+        event = PromptRequest(
+            request_id=request_id,
+            kind=kind,  # type: ignore[arg-type]
+            text=str(message.get("text", "")),
+            default=message.get("default"),
+            choices=choices,
+            multi=bool(message.get("multi", False)),
+            secret=bool(message.get("secret", False)),
+            label=str(message.get("label", "")),
+            minimum=str(message.get("min", "") or ""),
+            maximum=str(message.get("max", "") or ""),
+            step_id=self.step_id or None,
+        )
+        pending = _Pending(event)
+        with self._lock:
+            if self._closed:
+                self._write(request_id, STATUS_CANCEL, "")
+                return
+            self._pending[request_id] = pending
+        self._emit(event)
+        while not pending.done.wait(0.05) and not self._closed:
+            pass
+        if not pending.done.is_set():
+            with self._lock:
+                self._pending.pop(request_id, None)
+            self._write(request_id, STATUS_CANCEL, "")

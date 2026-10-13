@@ -8,9 +8,9 @@ import pytest
 from fixtures import text
 from fixtures.paths import DEV_SETUP
 
-from rt.core.errors import ParseError, ValidationError
-from rt.core.model import is_valid_id
-from rt.core.parser import check_script, parse_script, parse_text
+from kbash.core.errors import ParseError, ValidationError
+from kbash.core.model import is_valid_id
+from kbash.core.parser import check_script, parse_script, parse_text
 
 
 def parse(source: str):

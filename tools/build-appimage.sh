@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# build-appimage.sh — monta o AppDir enxuto do `rt` e gera o AppImage.
+# build-appimage.sh — monta o AppDir enxuto do `kbash` e gera o AppImage.
 #
-#   ./build-appimage.sh <repo-rt> <saida.AppImage>
+#   ./build-appimage.sh <repo> <saida.AppImage>
 #
 # Estratégia: AppImage AUTOCONTIDO (Plano A caminho C do handoff).
 #   * PySide6 **do pip, pinado em 6.10.2** — o Qt tem de ser o MESMO dos
@@ -15,8 +15,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="${1:?uso: build-appimage.sh <repo-rt> <saida.AppImage>}"
-SAIDA="${2:?uso: build-appimage.sh <repo-rt> <saida.AppImage>}"
+REPO="${1:?uso: build-appimage.sh <repo> <saida.AppImage>}"
+SAIDA="${2:?uso: build-appimage.sh <repo> <saida.AppImage>}"
 VENV="${VENV:-/tmp/venv}"
 DEBS="${DEBS:-/tmp/debs/x}"
 BUILD="${BUILD:-/tmp/appdir}"
@@ -253,10 +253,10 @@ cp -a "$DEBS/usr/lib/x86_64-linux-gnu/qt6/plugins/kf6/kirigami/platform/org.kde.
 # ---------------------------------------------------------------------------
 # 4. O projeto
 # ---------------------------------------------------------------------------
-log "projeto (src/rt) + payload"
-mkdir -p "$BUILD/rt" "$BUILD/payload"
-cp -a "$REPO/src/rt/." "$BUILD/rt/"
-find "$BUILD/rt" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+log "projeto (src/kbash) + payload"
+mkdir -p "$BUILD/kbash" "$BUILD/payload"
+cp -a "$REPO/src/kbash/." "$BUILD/kbash/"
+find "$BUILD/kbash" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 if [ -n "$PAYLOAD" ]; then
     cp "$PAYLOAD" "$BUILD/payload/script.sh"
 fi
@@ -267,7 +267,7 @@ fi
 log "AppRun"
 cat > "$BUILD/AppRun" <<APPRUN
 #!/usr/bin/env bash
-# AppRun do Sober Optimizer (rt). Montado por build-appimage.sh.
+# AppRun do kbash. Montado por build-appimage.sh.
 set -euo pipefail
 HERE="\$(dirname "\$(readlink -f "\${0}")")"
 APPDIR="\$HERE"
@@ -330,19 +330,19 @@ _rt_log_dir() {
     # legível porém ainda não criado — e caía no /tmp sem querer.
     for base in "\${XDG_STATE_HOME:-\$HOME/.local/state}" "\${TMPDIR:-/tmp}" "/tmp"; do
         [ -n "\$base" ] || continue
-        if mkdir -p "\$base/sober-optimizer" 2>/dev/null; then
-            echo "\$base/sober-optimizer"
+        if mkdir -p "\$base/kbash" 2>/dev/null; then
+            echo "\$base/kbash"
             return 0
         fi
     done
     echo /dev/null
 }
-RT_LOG="\$(_rt_log_dir)/sober-optimizer.err.log"
+RT_LOG="\$(_rt_log_dir)/kbash.err.log"
 [ -w "\$(dirname "\$RT_LOG")" ] || RT_LOG=/dev/null
 # só a última execução interessa: trunca a cada start
 if [ "\$RT_LOG" != /dev/null ]; then : >"\$RT_LOG"; fi
 _run() {
-    "\$APPDIR/usr/bin/python3" -m rt "\$@" 2>>"\$RT_LOG" || return \$?
+    "\$APPDIR/usr/bin/python3" -m kbash "\$@" 2>>"\$RT_LOG" || return \$?
     return 0
     return \$?
 }
@@ -365,9 +365,9 @@ exit \$_rc
 APPRUN
 chmod +x "$BUILD/AppRun"
 
-# o icone: PNG 256x256 gerado na hora (o .desktop aponta pra sober-optimizer)
+# o icone: PNG 256x256 gerado na hora (o .desktop aponta pra kbash)
 log "ícone"
-python3 - "$BUILD/sober-optimizer.png" <<'ICO'
+python3 - "$BUILD/kbash.png" <<'ICO'
 import zlib, struct, sys
 W = H = 256
 px = bytearray()
@@ -386,14 +386,18 @@ open(sys.argv[1], "wb").write(
     + chunk(b"IDAT", zlib.compress(bytes(px), 9))
     + chunk(b"IEND", b""))
 ICO
-cat > "$BUILD/sober-optimizer.desktop" <<'DESK'
+cat > "$BUILD/kbash.desktop" <<'DESK'
 [Desktop Entry]
 Type=Application
-Name=Sober Optimizer
+Name=kbash
 Exec=AppRun
-Icon=sober-optimizer
-Categories=Game;
+Icon=kbash
+Categories=Utility;
+MimeType=application/x-kbash;
 DESK
+# tipo MIME da extensão .kbash (o sistema registra ao integrar o AppImage)
+mkdir -p "$APP/share/mime/packages"
+cp "$REPO/packaging/kbash.xml" "$APP/share/mime/packages/kbash.xml"
 
 # ---------------------------------------------------------------------------
 # 5b. Cortes de tamanho (medidos; ver docs/BREEZE.md, seção "Tamanho")

@@ -16,12 +16,12 @@ Leia `SPEC.md` antes de qualquer tarefa e cite a seção que está implementando
 
 ## Convenções do repositório
 
-- Comandos: `pytest` (testes), `rt check <script.sh>` (validação, SPEC.md §4.6).
+- Comandos: `pytest` (testes), `kbash check <script.sh>` (validação, SPEC.md §4.6).
 - Testes: `./.venv/bin/python -m pytest tests/ -q` com `PYTHONNOUSERSITE=1`
   (o `.venv` usa o PySide6 **da distro**, o único que carrega o Kirigami;
   sem isso cai no PySide6 do pip e o QML quebra). `QT_QPA_PLATFORM=offscreen`
   para rodar sem display.
-- Entry points: `rt` (`python -m rt.main` em desenvolvimento; `rt/__main__.py`
+- Entry points: `kbash` (`python -m kbash.main` em desenvolvimento; `kbash/__main__.py`
   passa pelo `main`, com a trava de interpretador).
 - Erros de parse/validação são exceções com `arquivo:linha` (§4.6); a CLI
   imprime-os e devolve 2 (§12).

@@ -1,4 +1,4 @@
-# SPEC — rt (BashRT)
+# SPEC — kbash
 
 > Runtime com GUI (Qt/QML, Kirigami) que executa scripts bash anotados.
 > O script bash é apenas **código-fonte**; quem controla a execução, a interface e a interação com o usuário é o runtime.
@@ -62,11 +62,11 @@ Regras de arquitetura (invioláveis):
 ### Estrutura de pastas (real)
 
 ```
-kmodifier/                       # pacote do runtime (o repositório pode ter mais pastas ao redor)
+kbash/                       # pacote do runtime (o repositório pode ter mais pastas ao redor)
 ├── SPEC.md                      # este documento
 ├── AGENTS.md                    # regras para a IA (ver §14)
 ├── pyproject.toml
-├── src/rt/
+├── src/kbash/
 │   ├── cli.py, main.py, __main__.py, _startup.py
 │   ├── core/                    # Python puro, sem Qt (§3, regra 1)
 │   │   ├── model.py             # dataclasses: Option, Step, Script, RunPlan
@@ -86,13 +86,13 @@ kmodifier/                       # pacote do runtime (o repositório pode ter ma
 │       └── qml/
 │           ├── main.qml
 │           ├── pages/           # Welcome, Select, Run, Result (módulo `pages`)
-│           └── kirigami/BashRT/ # fachadas Kirigami (módulo `BashRT`)
+│           └── kirigami/kbash/ # fachadas Kirigami (módulo `kbash`)
 ├── tests/                       # pytest (test_*.py + fixtures/)
 ├── examples/                    # all-options.sh (todos os tipos), setup-dev.sh, sober-optimizer.sh
 └── docs/                        # BREEZE.md, KIRIGAMI-SPIKE.md, PORTAR.md (guia de porte)
 ```
 
-O repositório também guarda as ferramentas de empacotamento (`tools/`, ao lado de `kmodifier/`). Ver §11.1.
+O repositório também guarda as ferramentas de empacotamento (`tools/`, ao lado de `kbash/`). Ver §11.1.
 
 ---
 
@@ -193,7 +193,7 @@ install_deps() {
 Cada step roda em um processo novo que faz `source` do script inteiro e depois chama a função. Portanto:
 - Código de nível superior roda **a cada step**. O ideal é ter só definições (funções, variáveis).
 - O runtime exporta `RT_MODE=step` para o script poder proteger código de nível superior.
-- `rt check` emite **warning** (heurístico) quando encontra comandos soltos fora de funções.
+- `kbash check` emite **warning** (heurístico) quando encontra comandos soltos fora de funções.
 
 ### 4.6 Validação (erros de parse, todos com número de linha)
 - `id` duplicado (steps ou opções)
@@ -476,7 +476,7 @@ Provedores da v1:
 Escolha, em ordem de precedência:
 
 1. `--ui <nome>` na CLI;
-2. `$BASHRT_UI` no ambiente;
+2. `$KBASH_UI` no ambiente;
 3. `auto` (padrão): `qt` se há GUI, `terminal` se `stdin` for um TTY, `yes` caso
    contrário (com aviso — evita travamento em CI).
 
@@ -496,7 +496,7 @@ Regras:
 
 ### 9.1 Confiança e integridade
 - O parser nunca executa código do script.
-- Modo dev (`rt run arquivo.sh`): exibe caminho e SHA-256 antes de executar.
+- Modo dev (`kbash run arquivo.sh`): exibe caminho e SHA-256 antes de executar.
 - Modo bundle: o payload traz `manifest.json` com hash; o runtime verifica antes de abrir a GUI e recusa se divergir. **Não implementado** (§11.2).
 - Valores de `rt_secret` e opções `type=password` nunca vão para logs (nem para o arquivo de log persistente).
 
@@ -519,13 +519,13 @@ Planejado: `$XDG_STATE_HOME/<id>/logs/AAAA-MM-DD_HH-MM-SS.log`, com timestamp, s
 
 Há três caminhos, decididos nesta ordem:
 
-1. **Argumento**: `rt run arquivo.sh` (ou só `rt arquivo.sh`, e no AppImage
+1. **Argumento**: `kbash run arquivo.sh` (ou só `kbash arquivo.sh`, e no AppImage
    `AppImage arquivo.sh`) abre esse script. Com `--headless`, roda no terminal.
 2. **Embutido**: sem argumentos, se o bundle tem `$APPDIR/payload/script.sh`
    (o build copia o `PAYLOAD`), abre esse script. É o comportamento do AppImage
    distribuído com um script.
 3. **Tela inicial (home)**: sem argumentos e sem script embutido, ou com
-   `rt home` (mesmo com script embutido), abre a home. Lá o usuário escolhe um
+   `kbash home` (mesmo com script embutido), abre a home. Lá o usuário escolhe um
    `.sh` pelo seletor do portal (`Escolher script…`) ou arrasta o arquivo para a
    janela. `Bridge.loadScript` valida (`.sh`, legível, parse sem erro) e troca o
    script sem reiniciar o app. Não há execução na home: `Bridge.start` recusa.
@@ -545,7 +545,7 @@ runtime genérico, que abre sempre na home.
   `QT_QUICK_CONTROLS_STYLE` se já definido. Sem o módulo Breeze, cai para `Basic`.
 - Fonte base com piso de 11 pt (`FONTE_MINIMA_PT` em `gui/app.py`): sem o tema de
   plataforma do KDE, o Qt cai em ~9 pt e os controles do Kirigami ficam pequenos.
-- **Exceção de cor (checkbox):** `gui/qml/kirigami/BashRT/AppCheckBox.qml` fixa as
+- **Exceção de cor (checkbox):** `gui/qml/kirigami/kbash/AppCheckBox.qml` fixa as
   cores do indicador por pedido do usuário: check **branco** sobre o `highlightColor`
   quando marcado; contorno **preto** quando desmarcado. Não é uma regra geral: as
   outras telas continuam usando `Kirigami.Theme`.
@@ -614,7 +614,7 @@ runtime genérico, que abre sempre na home.
 - **Links (`type=link`)** abrem por `Bridge.openLink`, que usa
   `QDesktopServices.openUrl` e só aceita `http`/`https` (também recusa no
   runtime o que o parser já recusou).
-- Os componentes ficam em `gui/qml/kirigami/BashRT/`, importados como módulo `BashRT`;
+- Os componentes ficam em `gui/qml/kirigami/kbash/`, importados como módulo `kbash`;
   as telas ficam em `gui/qml/pages/`, importadas como módulo `pages`.
 - **Tema claro/escuro: segue o sistema, sem botão para trocar.** `theme.isDark`
   deriva de `Kirigami.Theme.backgroundColor`. Não existe alternância manual em
@@ -699,7 +699,7 @@ visual Breeze, sem depender de nada instalado (só GPU e D-Bus do host).
 - **Tamanho medido**: **40,1 MB** no AppImage (zstd com bloco de 1 MB e nível 22).
   Não é a meta antiga de 80–130 MB: a meta atual é não passar de ~45 MB sem
   justificativa por componente.
-- **Ferramenta**: `tools/build-appimage.sh <kmodifier> <saida.AppImage>`, com
+- **Ferramenta**: `tools/build-appimage.sh <kbash> <saida.AppImage>`, com
   `appimagetool` (`mksquashfs` embutido, que só aceita zstd). Para
   distribuição, o arquivo é dividido em partes de 20 MB (`split -b 20M`), e a
   remontagem é verificada com `cat parte* | cmp`.
@@ -737,7 +737,7 @@ Descoberta do payload (`packaging/discovery.py`), em ordem:
 2. `$APPDIR/payload` (AppImage — já é o caminho usado pelo §11.1)
 3. `payload/` ao lado do executável
 
-`rt pack script.sh -o meu-instalador [--assets dir] [--name X]` copiaria o runtime
+`kbash pack script.sh -o meu-instalador [--assets dir] [--name X]` copiaria o runtime
 (onedir) e geraria `payload/` + `manifest.json`.
 
 ### 11.3 Binário único (pesquisa, fora da v1)
@@ -748,16 +748,16 @@ Anexar o payload ao final do executável conflita com bootloaders onefile do PyI
 ## 12. CLI
 
 ```
-rt                                       # sem argumentos: script embutido (§10.0) ou a home
-rt home                                  # abre a home mesmo com script embutido
-rt <script.sh>                           # atalho de `rt run <script.sh>`
-rt run <script.sh>                       # GUI com o script
-rt run <script.sh> --headless [--select a,b] [--opt k=v ...] [--yes] [--ui auto|qt|terminal|yes|none]
-rt check <script.sh>                     # valida (erros e warnings com linha)
-rt plan <script.sh> [--select a,b] [--opt k=v ...] [--json]   # mostra o plano de execução e sai
+kbash                                       # sem argumentos: script embutido (§10.0) ou a home
+kbash home                                  # abre a home mesmo com script embutido
+kbash <script.sh>                           # atalho de `kbash run <script.sh>`
+kbash run <script.sh>                       # GUI com o script
+kbash run <script.sh> --headless [--select a,b] [--opt k=v ...] [--yes] [--ui auto|qt|terminal|yes|none]
+kbash check <script.sh>                     # valida (erros e warnings com linha)
+kbash plan <script.sh> [--select a,b] [--opt k=v ...] [--json]   # mostra o plano de execução e sai
 ```
 
-`--ui` (ou `$BASHRT_UI`) escolhe o provedor de interação descrito em §8.5.
+`--ui` (ou `$KBASH_UI`) escolhe o provedor de interação descrito em §8.5.
 
 Códigos de saída: `0` sucesso · `1` falha de step · `2` erro de parse/validação · `130` cancelado.
 
@@ -793,7 +793,7 @@ está pronta quando **todos** os critérios passam.
 - [x] Prompts do protocolo aparecem como diálogos (canceláveis) e respondem ao script.
 
 ### Fase 4 — Kirigami e polimento ✅ (com ressalvas)
-- [x] Fachadas Kirigami (módulo `BashRT`, API verificada por teste).
+- [x] Fachadas Kirigami (módulo `kbash`, API verificada por teste).
 - [x] Spike de empacotamento do Kirigami (§10.1) documentado em `docs/KIRIGAMI-SPIKE.md`.
 - [x] Tema claro/escuro, ícones (`#@icon`: nome de tema ou arquivo em `assets/`),
       estados vazios e de erro (`InlineMessage`).
@@ -833,7 +833,7 @@ está pronta quando **todos** os critérios passam.
 
 ## 15. Questões em aberto
 
-1. Nome definitivo do projeto e do formato (`#@runtime 1` pode virar `#@bashrt 1`). Hoje o pacote é `rt`, o produto aparece como BashRT.
+1. ~~Nome definitivo do projeto~~: decidido, **kbash** (pacote, comando, app e extensão `.kbash`). A diretiva `#@runtime 1` e as funções `rt_*`/`RT_*` continuam como API dos scripts.
 2. Condicionais em steps (`#@when editor=vim`) — v1.1?
 3. Suporte a PTY para ferramentas que exigem terminal (barras de progresso, cores).
 4. Renderização de cores ANSI no painel de log (v1 remove as sequências).

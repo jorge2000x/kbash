@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tipo MIME do kbash: scripts bash anotados com extensão .kbash. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-kbash">
+    <comment>Script kbash</comment>
+    <sub-class-of type="text/x-shellscript"/>
+    <glob pattern="*.kbash"/>
+  </mime-type>
+</mime-info>
