@@ -1,0 +1,33 @@
+# Pacotes Ubuntu 26.04 (resolute) que o AppImage embute para o estilo Breeze.
+# Gerado a partir do índice de archive.ubuntu.com; baixar com:
+#   xargs -n1 -P8 curl -sSO < breeze-debs.txt   (e extrair com dpkg-deb -x)
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kconfig/libkf6configcore6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kconfig/libkf6config-data_6.24.0-0ubuntu1_all.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kiconthemes/libkf6iconthemes6_6.24.0-0ubuntu2_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-ki18n/libkf6i18n6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-ki18n/libkf6i18n-data_6.24.0-0ubuntu1_all.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kcolorscheme/libkf6colorscheme6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kguiaddons/libkf6guiaddons6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kguiaddons/libkf6guiaddons-data_6.24.0-0ubuntu1_all.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kconfig/libkf6configgui6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kcolorscheme/libkf6colorscheme-data_6.24.0-0ubuntu1_all.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-breeze-icons/libkf6breezeicons6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-karchive/libkf6archive6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-karchive/libkf6archive-data_6.24.0-0ubuntu1_all.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kiconthemes/libkf6iconthemes-data_6.24.0-0ubuntu2_all.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamidelegates6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigami-data_6.24.0-0ubuntu1_all.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamipolyfill6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamiprivate6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamitemplates6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamiprimitives6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamiplatform6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamilayouts6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamidialogs6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamicontrols6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigami6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/qml6-module-org-kde-kirigami_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kirigami/libkirigamilayoutsprivate6_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/k/kf6-kguiaddons/qml6-module-org-kde-guiaddons_6.24.0-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/universe/q/qqc2-breeze-style/qml6-module-org-kde-breeze_6.6.4-0ubuntu1_amd64.deb
+https://archive.ubuntu.com/ubuntu/pool/main/w/wayland/libwayland-client0_1.24.0-2_amd64.deb

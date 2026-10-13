@@ -1,0 +1,110 @@
+name: AppImage
+
+# Gera dois AppImages do BashRT a cada push na main, a cada tag v* e sob demanda:
+#   - embutido: já traz o script de exemplo (examples/sober-optimizer.sh) e abre direto nele;
+#   - limpo: sem script, abre na tela inicial (home) para escolher um arquivo.
+# Os arquivos saem como artefatos do run; em tags v* também vão para a Release.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: AppImage ${{ matrix.variant }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: embutido
+            payload: examples/sober-optimizer.sh
+            out: BashRT-embutido-x86_64.AppImage
+          - variant: limpo
+            payload: ""
+            out: BashRT-limpo-x86_64.AppImage
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências do sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.11 python3.11-venv python3.11-dev \
+            binutils squashfs-tools zsync curl ca-certificates
+
+      - name: Venv com PySide6 6.10.2 (Qt igual ao dos pacotes Ubuntu)
+        run: |
+          python3.11 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --upgrade pip
+          "$RUNNER_TEMP/venv/bin/pip" install "PySide6==6.10.2"
+
+      - name: Pacotes Kirigami/Breeze (Ubuntu 26.04)
+        run: |
+          mkdir -p "$RUNNER_TEMP/debs" && cd "$RUNNER_TEMP/debs"
+          xargs -n1 -P8 curl -sSfO < "$GITHUB_WORKSPACE/tools/breeze-debs.txt"
+          mkdir -p "$RUNNER_TEMP/debsx"
+          for f in *.deb; do dpkg-deb -x "$f" "$RUNNER_TEMP/debsx"; done
+
+      - name: appimagetool (extraído, sem FUSE)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfLo appimagetool.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool.AppImage
+          ./appimagetool.AppImage --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+
+      - name: Build
+        env:
+          VENV: ${{ runner.temp }}/venv
+          DEBS: ${{ runner.temp }}/debsx
+          BUILD: ${{ runner.temp }}/appdir-${{ matrix.variant }}
+          APPIMAGETOOL: ${{ runner.temp }}/squashfs-root/AppRun
+          PAYLOAD: ${{ matrix.payload }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          bash tools/build-appimage.sh "$GITHUB_WORKSPACE" \
+            "$RUNNER_TEMP/out/${{ matrix.out }}"
+
+      - name: Teste de fumaça (check do exemplo dentro do AppImage)
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          chmod +x "$RUNNER_TEMP/out/${{ matrix.out }}"
+          # só leitura: valida o runtime embutido; não executa nenhum script
+          "$RUNNER_TEMP/out/${{ matrix.out }}" check examples/all-options.sh
+
+      - name: Checksum
+        run: |
+          cd "$RUNNER_TEMP/out"
+          sha256sum "${{ matrix.out }}" > "${{ matrix.out }}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+
+  release:
+    name: Publicar release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Anexar à release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
+            --generate-notes dist/* 2>/dev/null \
+          || gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
