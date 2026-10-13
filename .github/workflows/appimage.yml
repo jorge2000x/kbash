@@ -52,7 +52,7 @@ jobs:
         run: |
           python3.11 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --upgrade pip
-          "$RUNNER_TEMP/venv/bin/pip" install "PySide6==6.10.2"
+          "$RUNNER_TEMP/venv/bin/pip" install "PySide6-Essentials==6.10.2" "shiboken6==6.10.2"
 
       - name: Pacotes Kirigami/Breeze (Ubuntu 26.04)
         run: |
