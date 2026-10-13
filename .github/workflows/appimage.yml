@@ -38,8 +38,13 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y --no-install-recommends python3.11 python3.11-venv \
-            binutils squashfs-tools zsync curl ca-certificates xz-utils dpkg-dev
+          apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+            software-properties-common binutils squashfs-tools xz-utils
+          # python3.11 não está no Ubuntu 24.04 (noble): vem do PPA deadsnakes
+          add-apt-repository -y ppa:deadsnakes/ppa
+          apt-get update
+          apt-get install -y --no-install-recommends python3.11 python3.11-venv
+          python3.11 --version
 
       - name: Venv com PySide6 6.10.2 (Qt igual ao dos pacotes Ubuntu)
         run: |
