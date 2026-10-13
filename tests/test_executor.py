@@ -153,7 +153,10 @@ def test_stdout_and_stderr_are_separated(tmp_path: Path) -> None:
     collector = Collector()
     result = make(parse_script(target)).run(collector)
     assert result.status is RunState.SUCCESS
-    assert collector.logs == ["para-fora", "para-erro"]
+    # stdout e stderr são lidos por threads distintas: a ordem entre eles não é
+    # garantida, então cada fluxo é verificado separadamente.
+    assert collector.stderr == ["para-erro"]
+    assert [t for t in collector.logs if t != "para-erro"] == ["para-fora"]
     assert collector.stderr == ["para-erro"]
 
 
