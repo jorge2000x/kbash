@@ -39,7 +39,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl \
-            python3.14 python3.14-venv binutils squashfs-tools xz-utils
+            python3.14 python3.14-venv python3 binutils file squashfs-tools xz-utils
           python3.14 --version
 
       - name: Venv com PySide6 6.10.2 (Qt igual ao dos pacotes Ubuntu)
