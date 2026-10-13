@@ -20,7 +20,7 @@ SAIDA="${2:?uso: build-appimage.sh <repo-rt> <saida.AppImage>}"
 VENV="${VENV:-/tmp/venv}"
 DEBS="${DEBS:-/tmp/debs/x}"
 BUILD="${BUILD:-/tmp/appdir}"
-SP="$VENV/lib/python3.11/site-packages"
+SP="$VENV/lib/python3.14/site-packages"
 # O Qt do PySide6 TEM de ser o mesmo dos pacotes Ubuntu (6.10.2), senão os
 # plugins do Breeze/KF6 não carregam (qt6-base-private-abi). Falha cedo, aqui.
 QT_ESPERADO=6.10.2
@@ -39,14 +39,14 @@ log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 # 1. Python embutido
 # ---------------------------------------------------------------------------
 log "Python (binário estático: não precisa de libpython.so)"
-rm -rf "$BUILD"; mkdir -p "$APP/bin" "$APP/lib/python3.11"
-cp /usr/bin/python3.11 "$APP/bin/python3"
+rm -rf "$BUILD"; mkdir -p "$APP/bin" "$APP/lib/python3.14"
+cp /usr/bin/python3.14 "$APP/bin/python3"
 ln -sf python3 "$APP/bin/python"
 
 log "stdlib do Python, podada (§A2.3/A2.4)"
-cp -a /usr/lib/python3.11/. "$APP/lib/python3.11/"
-find "$APP/lib/python3.11" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
-find "$APP/lib/python3.11" -name '*.pyc' -delete 2>/dev/null || true
+cp -a /usr/lib/python3.14/. "$APP/lib/python3.14/"
+find "$APP/lib/python3.14" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+find "$APP/lib/python3.14" -name '*.pyc' -delete 2>/dev/null || true
 
 # Estratégia de poda do stdlib: lista de REMOÇÃO, não de keep-list.
 #
@@ -76,21 +76,21 @@ prune_dir() {
         done
     done
 }
-prune_dir "$APP/lib/python3.11" $REMOVER_STDLIB
+prune_dir "$APP/lib/python3.14" $REMOVER_STDLIB
 
 # ---------------------------------------------------------------------------
 # 2. PySide6 (do pip) podado
 # ---------------------------------------------------------------------------
 log "PySide6 do pip + shiboken6"
-mkdir -p "$APP/lib/python3.11/site-packages"
+mkdir -p "$APP/lib/python3.14/site-packages"
 cp -a "$SP/PySide6" "$SP/shiboken6" "$SP/PySide6_Essentials"*.dist-info \
-      "$APP/lib/python3.11/site-packages/" 2>/dev/null || \
-cp -a "$SP/PySide6" "$SP/shiboken6" "$APP/lib/python3.11/site-packages/"
-rm -rf "$APP/lib/python3.11/site-packages"/__pycache__
+      "$APP/lib/python3.14/site-packages/" 2>/dev/null || \
+cp -a "$SP/PySide6" "$SP/shiboken6" "$APP/lib/python3.14/site-packages/"
+rm -rf "$APP/lib/python3.14/site-packages"/__pycache__
 
 # 2.1 traduções: 196 arquivos, 14 MB → só pt_BR + en + os base
 log "A2.6 traduções do Qt (14 MB → ~1 MB)"
-TR="$APP/lib/python3.11/site-packages/PySide6/Qt/translations"
+TR="$APP/lib/python3.14/site-packages/PySide6/Qt/translations"
 if [ -d "$TR" ]; then
     find "$TR" -name '*.qm' ! -name 'qtbase_pt_BR*' ! -name 'qtbase_en*' \
          ! -name 'qt_*.qm' ! -name 'qtdeclarative_pt_BR*' -delete
@@ -99,7 +99,7 @@ fi
 # 2.2 módulos QML: mantém só o fecho do projeto (medido: QtQuick, Controls,
 #     Layouts, org.kde.kirigami) + Templates/Window/Shapes, deps de Controls.
 log "B2 módulos QML"
-QM="$APP/lib/python3.11/site-packages/PySide6/Qt/qml"
+QM="$APP/lib/python3.14/site-packages/PySide6/Qt/qml"
 # mesma lógica: remove o que é certo, mantém o resto do QtQuick
 prune_dir "$QM" QtTest QtMultimedia QtWebEngine QtWebSockets QtCharts QtDataVis \
               QtQuick3D QtPositioning QtBluetooth QtSerialPort QtTextToSpeech
@@ -126,7 +126,7 @@ rm -rf "$QM/QtQuick/VirtualKeyboard" "$QM/QtQuick/Pdf" "$QM/QtQuick/Particles" \
 #     corte B5 do plano e exige RECOMPILAR o Qt com dados filtrados — não dá
 #     para fazer pós-hoc. É o maior item que sobrou, e é o preço da GUI.
 log "B3 .so do Qt (corte por lista — ICU fica)"
-QL="$APP/lib/python3.11/site-packages/PySide6/Qt/lib"
+QL="$APP/lib/python3.14/site-packages/PySide6/Qt/lib"
 for lib in libQt6Widgets.so.6 libQt6Designer.so.6 libQt6DesignerComponents.so.6 \
            libQt6QuickControls2Imagine.so.6 libQt6QuickControls2Material.so.6 \
            libQt6QuickControls2Universal.so.6 libQt6QuickControls2Fusion.so.6 \
@@ -137,7 +137,7 @@ done
 
 # 2.4 plugins de plataforma: mantém xcb, wayland, offscreen, imageformats
 log "B1 plugins de plataforma"
-PL="$APP/lib/python3.11/site-packages/PySide6/Qt/plugins"
+PL="$APP/lib/python3.14/site-packages/PySide6/Qt/plugins"
 if [ -d "$PL" ]; then
     for d in "$PL"/*/; do
         b="$(basename "$d")"
@@ -154,7 +154,7 @@ fi
 
 # 2.5 bindings Python: só os 5 módulos que o projeto importa
 log "B4 bindings PySide6 (só QtCore/QtGui/QtQml/QtQuick/QtDBus)"
-PS="$APP/lib/python3.11/site-packages/PySide6"
+PS="$APP/lib/python3.14/site-packages/PySide6"
 KEEP="QtCore.py QtGui.py QtQml.py QtQuick.py QtDBus.py QtNetwork.py Qt.py __init__.py"
 for f in "$PS"/*.py; do
     b="$(basename "$f")"
@@ -273,10 +273,10 @@ HERE="\$(dirname "\$(readlink -f "\${0}")")"
 APPDIR="\$HERE"
 
 export PYTHONHOME="\$APPDIR/usr"
-export PYTHONPATH="\$APPDIR:\$APPDIR/usr/lib/python3.11/site-packages"
-export LD_LIBRARY_PATH="\$APPDIR/usr/lib/x86_64-linux-gnu:\$APPDIR/usr/lib/python3.11/site-packages/PySide6/Qt/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-export QML2_IMPORT_PATH="\$APPDIR/usr/lib/qml:\$APPDIR/usr/lib/python3.11/site-packages/PySide6/Qt/qml\${QML2_IMPORT_PATH:+:\$QML2_IMPORT_PATH}"
-export QT_PLUGIN_PATH="\$APPDIR/usr/lib/qtplugins:\$APPDIR/usr/lib/python3.11/site-packages/PySide6/Qt/plugins"
+export PYTHONPATH="\$APPDIR:\$APPDIR/usr/lib/python3.14/site-packages"
+export LD_LIBRARY_PATH="\$APPDIR/usr/lib/x86_64-linux-gnu:\$APPDIR/usr/lib/python3.14/site-packages/PySide6/Qt/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+export QML2_IMPORT_PATH="\$APPDIR/usr/lib/qml:\$APPDIR/usr/lib/python3.14/site-packages/PySide6/Qt/qml\${QML2_IMPORT_PATH:+:\$QML2_IMPORT_PATH}"
+export QT_PLUGIN_PATH="\$APPDIR/usr/lib/qtplugins:\$APPDIR/usr/lib/python3.14/site-packages/PySide6/Qt/plugins"
 export QT_QPA_PLATFORM_PLUGIN_PATH="\$QT_PLUGIN_PATH/platforms"
 # Estilo: NÃO é fixado aqui. gui/app.py escolhe org.kde.breeze quando o módulo
 # existe no bundle (que é o caso) e cai para Basic se não existir. Para forçar
@@ -401,7 +401,7 @@ DESK
 # ICU: se ICU_DATA_SO apontar para um libicudata.so.73 recompilado com dados
 # só de en/pt (tools/build-icu-data.sh), ele substitui o do wheel. Mesmo soname
 # e símbolos _73: o Qt carrega sem mudança. Corte: ~25 MB.
-PS_LIB="$APP/lib/python3.11/site-packages/PySide6/Qt/lib"
+PS_LIB="$APP/lib/python3.14/site-packages/PySide6/Qt/lib"
 if [ -n "${ICU_DATA_SO:-}" ]; then
     [ -f "$ICU_DATA_SO" ] || { echo "erro: ICU_DATA_SO não existe: $ICU_DATA_SO" >&2; exit 1; }
     log "ICU filtrado (en+pt) no lugar do libicudata do wheel"
@@ -419,7 +419,7 @@ python3 "$HERE/prune_unused_libs.py" "$BUILD"
 # estático de build (~24 MB) e não é usada em runtime: o binário é estático.
 log "poda do stdlib (fecho de imports + rastreio)"
 python3 "$HERE/prune_stdlib.py" "$BUILD" --trace "$HERE/stdlib-trace.txt"
-find "$APP/lib/python3.11" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+find "$APP/lib/python3.14" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 6. strip + appimagetool
