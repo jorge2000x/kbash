@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -151,11 +152,21 @@ class IpcChannel:
     # -- ciclo de vida --------------------------------------------------
     @staticmethod
     def _make_dir(owner: str) -> Path:
+        """§8.1 — cria um diretório novo ``0700``, exclusivo desta execução.
+
+        ``mkdir`` sem ``exist_ok`` é atômico: se o caminho já existir (inclusive
+        como symlink plantado em ``/tmp``), a criação falha em vez de reutilizar
+        ou alterar o alvo. Nomes únicos por execução evitam que duas execuções
+        simultâneas do mesmo script apaguem os FIFOs uma da outra.
+        """
         base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")
         base.mkdir(parents=True, exist_ok=True)
-        ipc_dir = base / (owner or f"kbash-{os.getpid()}")
-        ipc_dir.mkdir(mode=0o700, exist_ok=True)
-        os.chmod(ipc_dir, 0o700)
+        ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
+        try:
+            ipc_dir.mkdir(mode=0o700)
+        except FileExistsError:
+            raise IpcError(f"diretório de IPC já existe: {ipc_dir}") from None
+        os.chmod(ipc_dir, 0o700)  # recém-criado por nós: não é um alvo de symlink
         return ipc_dir
 
     def close(self) -> None:
@@ -253,6 +264,11 @@ class IpcChannel:
             self._handle_line(buffer)
 
     def _handle_line(self, raw: bytes) -> None:
+        """Processa uma linha; nenhuma mensagem malformada pode matar o leitor.
+
+        Se a linha for inválida e tiver ``id``, o script recebe ``cancel`` para
+        não ficar esperando resposta para sempre (§7.4).
+        """
         self._processed += 1
         text = raw.decode("utf-8", errors="replace").strip()
         if not text:
@@ -264,6 +280,21 @@ class IpcChannel:
             return
         if not isinstance(message, dict):
             return
+        try:
+            self._dispatch_message(message)
+        except Exception as exc:  # noqa: BLE001 — o leitor não pode morrer
+            self._emit(LogLine(self.step_id or None, "kbash",
+                               f"mensagem IPC malformada ignorada: {exc}", "warn"))
+            request_id = str(message.get("id", ""))
+            if request_id and str(message.get("t", "")) in PROMPT_KINDS:
+                with self._lock:
+                    self._pending.pop(request_id, None)
+                try:
+                    self._write(request_id, STATUS_CANCEL, "")
+                except IpcError:
+                    pass
+
+    def _dispatch_message(self, message: dict[str, Any]) -> None:
         kind = str(message.get("t", ""))
         if kind == "progress":
             value = message.get("value")
@@ -310,7 +341,10 @@ class IpcChannel:
 
     def _dispatch(self, kind: str, message: dict[str, Any]) -> None:
         request_id = str(message.get("id", ""))
-        choices = tuple(str(item) for item in message.get("choices", ()) or ())
+        raw_choices = message.get("choices", ()) or ()
+        if not isinstance(raw_choices, (list, tuple)):
+            raise TypeError(f"choices deve ser uma lista, veio {type(raw_choices).__name__}")
+        choices = tuple(str(item) for item in raw_choices)
         event = PromptRequest(
             request_id=request_id,
             kind=kind,  # type: ignore[arg-type]

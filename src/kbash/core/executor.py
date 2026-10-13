@@ -10,6 +10,7 @@ Invariantes (SPEC.md §3/§7/§14):
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
 import signal
 import subprocess
@@ -231,7 +232,10 @@ class Executor:
         workdir = Path(self._tempdir.name)
         result.workdir = str(workdir)
         if self.ipc_factory is not None:
-            channel = self.ipc_factory(workdir, self._emit, f"{self.script.id}-{os.getpid()}")
+            # sufixo aleatório: uma execução nunca reutiliza o diretório de outra
+            channel = self.ipc_factory(
+                workdir, self._emit, f"{self.script.id}-{os.getpid()}-{secrets.token_hex(4)}"
+            )
             self._ipc = channel
             # §7.2 — rt_set alimenta as variáveis dos steps seguintes.
             setattr(channel, "variables", self.variables)
