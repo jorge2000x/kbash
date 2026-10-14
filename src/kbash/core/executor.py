@@ -58,8 +58,12 @@ STEP_COMMAND = (
 )
 
 #: §9.2 — variáveis repassadas ao pkexec além de RT_* / OPT_*.
+#: PATH e HOME do root são fixos: um PATH do usuário deixaria um binário
+#: sombreado em ~/bin rodar como root (SPEC.md §9.2).
+ROOT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ROOT_HOME = "/root"
 ROOT_PASSTHROUGH = (
-    "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "DISPLAY",
+    "USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "DISPLAY",
     "XAUTHORITY", "XDG_RUNTIME_DIR", "XDG_DATA_DIRS",
 )
 
@@ -108,13 +112,16 @@ def pkexec_authorize() -> bool:
 
 def default_root_command(argv: Sequence[str], env: dict[str, str], cwd: str) -> list[str]:
     """§9.2 — ``pkexec env <vars> bash ...``, repassando só o necessário."""
-    exported = [f"{key}={env[key]}" for key in ROOT_PASSTHROUGH if key in env]
+    exported = [f"PATH={ROOT_PATH}", f"HOME={ROOT_HOME}"]
+    exported += [f"{key}={env[key]}" for key in ROOT_PASSTHROUGH if key in env]
     exported += [
         f"{key}={value}"
         for key, value in sorted(env.items())
         if key.startswith(("RT_", "OPT_"))
     ]
-    return ["pkexec", "env", "-i", *exported, *argv]
+    # /usr/bin/env absoluto: o pkexec executa o programa como root, e um
+    # `env` resolvido pelo PATH do usuário rodaria código dele como root
+    return ["pkexec", "/usr/bin/env", "-i", *exported, *argv]
 
 
 @dataclass

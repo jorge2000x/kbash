@@ -22,7 +22,7 @@ from kbash.core.events import (
     StepFinished,
     StepStarted,
 )
-from kbash.core.executor import Executor, default_root_command
+from kbash.core.executor import ROOT_HOME, ROOT_PATH, Executor, default_root_command
 from kbash.core.ipc import IpcChannel
 from kbash.core.model import RunState, StepState
 from kbash.core.parser import parse_script
@@ -390,13 +390,27 @@ def test_root_command_repasses_only_rt_and_opt() -> None:
         "RT_SCRIPT": "/tmp/a.sh", "RT_STEP_ID": "x",
     }
     argv = default_root_command(["bash", "-c", "x"], env, "/home/x")
-    assert argv[:2] == ["pkexec", "env"]
-    assert "-i" in argv
-    assert "PATH=/usr/bin" in argv
+    assert argv[:3] == ["pkexec", "/usr/bin/env", "-i"]
     assert "RT_STEP_ID=x" in argv
     assert "OPT_NOME=Ana" in argv
     assert not any(item.startswith("SECRET=") for item in argv)
     assert argv[-3:] == ["bash", "-c", "x"]
+
+
+def test_root_command_never_passes_the_user_path_or_home() -> None:
+    """Regressão: o PATH do usuário chegava ao root; um ~/bin/dnf rodava como root."""
+    env = {"PATH": "/home/ana/bin:/usr/bin", "HOME": "/home/ana", "USER": "ana"}
+    argv = default_root_command(["bash", "-c", "x"], env, "/home/ana")
+    assert f"PATH={ROOT_PATH}" in argv
+    assert f"HOME={ROOT_HOME}" in argv
+    assert not any("/home/ana" in item for item in argv)
+    assert "PATH=/home/ana/bin:/usr/bin" not in argv
+
+
+def test_root_command_path_is_absolute_system_dirs_only() -> None:
+    entries = ROOT_PATH.split(":")
+    assert all(entry.startswith("/") for entry in entries)
+    assert "/home" not in ROOT_PATH and "~" not in ROOT_PATH
 
 
 def test_root_step_runs_through_root_command_after_authorization(tmp_path: Path) -> None:
