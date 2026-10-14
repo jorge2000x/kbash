@@ -225,3 +225,39 @@ def test_dependency_cycle_is_a_validation_error() -> None:
     )
     with pytest.raises(ValidationError):
         parse_text(text)
+
+
+# ---------------------------------------------------------------------------
+# rt_set: chave inválida nunca vira variável de ambiente (§7.2)
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("key", ["x y", "a=b", "1x", "", "a-b", "ç"])
+def test_invalid_set_key_is_ignored_with_a_warning(tmp_path: Path, key: str) -> None:
+    events: list[object] = []
+    channel = IpcChannel(tmp_path, events.append, "setkey-" + os.urandom(3).hex())
+    try:
+        message = json.dumps({"t": "set", "key": key, "value": "v"})
+        _write_out(channel, (message + "\n").encode())
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not any(
+            isinstance(e, LogLine) and "chave inválida" in e.text for e in events
+        ):
+            time.sleep(0.02)
+        assert channel.variables == {}
+        assert any(isinstance(e, LogLine) and "chave inválida" in e.text for e in events)
+    finally:
+        channel.close()
+
+
+def test_case_variants_of_a_key_are_one_variable(tmp_path: Path) -> None:
+    """rt_get é case-insensitive: ``lower`` e ``LOWER`` são a mesma variável."""
+    events: list[object] = []
+    channel = IpcChannel(tmp_path, events.append, "setup-" + os.urandom(3).hex())
+    try:
+        _write_out(channel, b'{"t":"set","key":"lower","value":"a"}\n')
+        _write_out(channel, b'{"t":"set","key":"LOWER","value":"b"}\n')
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and channel.variables.get("LOWER") != "b":
+            time.sleep(0.02)
+        assert channel.variables == {"LOWER": "b"}  # a última escrita vence
+    finally:
+        channel.close()

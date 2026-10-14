@@ -32,6 +32,7 @@ from .events import (
     StepFinished,
     StepStarted,
 )
+from .ipc import valid_var_key
 from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
 
@@ -352,7 +353,7 @@ class Executor:
                 stderr=subprocess.PIPE,
                 start_new_session=True,
             )
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError: nome/valor de env inválido
             self._log(step.id, "kbash", f"não foi possível iniciar o step: {exc}", "error")
             return self._finish(step, StepState.FAILED, None, started, str(exc))
         with self._lock:
@@ -437,7 +438,8 @@ class Executor:
         for option_id, value in self.plan.options.items():
             env[f"OPT_{option_id.upper()}"] = value
         for key, value in self.variables.items():
-            env[f"RT_VAR_{key.upper()}"] = value
+            if valid_var_key(key):  # defesa: o IPC já filtra
+                env[f"RT_VAR_{key.upper()}"] = value
         return env
 
     def _step_cwd(self, env: dict[str, str]) -> str:

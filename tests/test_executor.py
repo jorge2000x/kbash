@@ -617,3 +617,42 @@ def test_signals_are_ignored_by_step_children(tmp_path: Path) -> None:
 
 def test_signal_module_is_not_used_with_shell() -> None:
     assert signal.SIGTERM and os.name == "posix"
+
+
+# -- rt_set com chave inválida não derruba o run (§7.2) ----------------------
+def test_invalid_rt_set_key_does_not_crash_the_run(tmp_path: Path) -> None:
+    target = tmp_path / "setkeys.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name SetKeys\n"
+        "#@step gravar\n"
+        "gravar() {\n"
+        '  rt_set "x y" 1\n'
+        '  rt_set "a=b" 2\n'
+        '  rt_set lower a\n'
+        '  rt_set LOWER b\n'
+        "}\n"
+        "#@step conferir\n#@depends gravar\n"
+        'conferir() {\n  [ "$RT_VAR_LOWER" = b ] || rt_fail "RT_VAR_LOWER errado"\n}\n',
+        encoding="utf-8",
+    )
+    collector = Collector()
+    result = make(parse_script(target), ipc_factory=IpcChannel).run(collector)
+    assert result.status is RunState.SUCCESS
+    assert any("chave inválida" in getattr(e, "text", "") for e in collector.events)
+
+
+def test_popen_value_error_fails_only_that_step(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "popen.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name Popen\n#@step a\na() { :; }\n",
+        encoding="utf-8",
+    )
+
+    def boom(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise ValueError("illegal environment variable name")
+
+    monkeypatch.setattr("kbash.core.executor.subprocess.Popen", boom)
+    collector = Collector()
+    result = make(parse_script(target)).run(collector)
+    assert result.status is RunState.FAILED
+    assert any("não foi possível iniciar" in getattr(e, "text", "") for e in collector.events)

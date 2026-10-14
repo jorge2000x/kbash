@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -35,6 +36,14 @@ __all__ = [
     "STATUS_OK",
     "STATUS_CANCEL",
 ]
+
+#: Chave de variável aceita por rt_set: vira RT_VAR_<CHAVE> no ambiente (§7.2).
+VAR_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def valid_var_key(key: str) -> bool:
+    return VAR_KEY_RE.fullmatch(key) is not None
+
 
 PROMPT_KINDS = ("confirm", "input", "choice", "number", "date", "time", "file", "text", "textbox")
 STATUS_OK = "ok"
@@ -326,7 +335,17 @@ class IpcChannel:
             self._emit(LogLine(self.step_id or None, "kbash", text, "error"))
             self._emit(Notify(text, "error"))
         elif kind == "set":
-            self.variables[str(message.get("key", ""))] = str(message.get("value", ""))
+            key = str(message.get("key", ""))
+            if not valid_var_key(key):
+                # chave com espaço ou `=` não vira variável de ambiente (ValueError no Popen)
+                self._emit(LogLine(self.step_id or None, "kbash",
+                                   f"rt_set ignorado: chave inválida {key!r}", "warn"))
+                return
+            # rt_get é case-insensitive (usa ^^): `lower` e `LOWER` são a mesma
+            # variável; a última escrita vence e a chave guardada é a dela
+            for existing in [k for k in self.variables if k.upper() == key.upper()]:
+                del self.variables[existing]
+            self.variables[key] = str(message.get("value", ""))
         elif kind in PROMPT_KINDS:
             self._dispatch(kind, message)
         elif str(message.get("id", "")):
