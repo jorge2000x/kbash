@@ -45,6 +45,7 @@ from ..core.planner import (
 )
 from ..core.ui import Prompt
 from .library import list_library, resolve_icon
+from .presets import PresetError, check_name, read_presets, write_presets
 from .models import LogModel, OptionModel, SelectedStepsProxy, StepListModel
 from .ui_qt import QtUi
 
@@ -120,6 +121,7 @@ class Bridge(QObject):
         self._page = PAGE_WELCOME
         self._library: list[dict[str, Any]] = []
         self.refreshLibrary()
+        self._presets: dict[str, dict[str, str]] = {}
         self._running = False
         self._executor: Executor | None = None
         self._thread: threading.Thread | None = None
@@ -167,6 +169,7 @@ class Bridge(QObject):
         self._steps_model.load(script)
         self._options_model.load(script, default_options(script))
         self._refresh_selection()
+        self._reload_presets()
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
         self._timer.timeout.connect(self._drain)
@@ -226,6 +229,10 @@ class Bridge(QObject):
     hasScriptChanged = Signal()
     libraryChanged = Signal()
     hasScript = Property(bool, lambda self: self._has_script(), notify=hasScriptChanged)
+
+    # predefinições do script aberto (gui/presets.py): nomes em ordem alfabética
+    presetsChanged = Signal()
+    presetNames = Property("QStringList", lambda self: sorted(self._presets), notify=presetsChanged)
 
     # biblioteca da tela inicial (gui/library.py): dicts com path, name, description, valid
     libraryEntries = Property("QVariantList", lambda self: self._library, notify=libraryChanged)
@@ -361,6 +368,70 @@ class Bridge(QObject):
             return Path(QUrl(location).toLocalFile())
         return Path(location)
 
+    def _reload_presets(self) -> None:
+        """Relê o JSON do script aberto (kbash-config/, gui/presets.py)."""
+        self._presets = {}
+        if self._script.id:
+            try:
+                self._presets = read_presets(self._script.id)
+            except PresetError as exc:
+                self.notifyRaised.emit(f"predefinições ignoradas: {exc}", "warn")
+        self.presetsChanged.emit()
+
+    def _savable_options(self) -> list[Any]:
+        """Opções que vão para a predefinição: tudo, menos senhas (nunca gravadas)."""
+        return [option for option in self._script.options if option.type != "password"]
+
+    @Slot(str, result=bool)
+    def savePreset(self, name: str) -> bool:  # noqa: N802
+        """Salva os valores atuais das opções (sem senhas) como predefinição ``name``."""
+        if not self._script.id:
+            self.notifyRaised.emit("este script não tem id: não dá para salvar predefinições", "error")
+            return False
+        try:
+            clean = check_name(name)
+            current = {**default_options(self._script), **self._options_model.values()}
+            values = {opt.id: current.get(opt.id, "") for opt in self._savable_options()}
+            presets = read_presets(self._script.id)
+            presets[clean] = values
+            write_presets(self._script.id, presets)
+        except (PresetError, OSError) as exc:
+            self.notifyRaised.emit(f"não consegui salvar a predefinição: {exc}", "error")
+            return False
+        self._reload_presets()
+        self.notifyRaised.emit(f"predefinição salva: {clean}", "info")
+        return True
+
+    @Slot(str, result=bool)
+    def loadPreset(self, name: str) -> bool:  # noqa: N802
+        """Aplica a predefinição ``name`` às opções (senhas ficam como estão)."""
+        values = self._presets.get(name)
+        if values is None:
+            self.notifyRaised.emit(f"predefinição não encontrada: {name}", "error")
+            return False
+        for option in self._savable_options():
+            if option.id in values:
+                self._options_model.set_value(option.id, values[option.id])
+        self._refresh_selection()
+        self.notifyRaised.emit(f"predefinição carregada: {name}", "info")
+        return True
+
+    @Slot(str, result=bool)
+    def deletePreset(self, name: str) -> bool:  # noqa: N802
+        """Apaga a predefinição ``name`` do arquivo do script."""
+        try:
+            presets = read_presets(self._script.id)
+            if name not in presets:
+                return False
+            del presets[name]
+            write_presets(self._script.id, presets)
+        except (PresetError, OSError) as exc:
+            self.notifyRaised.emit(f"não consegui apagar a predefinição: {exc}", "error")
+            return False
+        self._reload_presets()
+        self.notifyRaised.emit(f"predefinição apagada: {name}", "info")
+        return True
+
     @Slot()
     def refreshLibrary(self) -> None:  # noqa: N802
         """Relê a pasta do programa (gui/library.py)."""
@@ -408,6 +479,7 @@ class Bridge(QObject):
         self._steps_model.load(script)
         self._options_model.load(script, default_options(script))
         self._refresh_selection()
+        self._reload_presets()
         self._set_page(PAGE_WELCOME)
         for name in (
             "hasScriptChanged", "scriptNameChanged", "scriptDescriptionChanged",
