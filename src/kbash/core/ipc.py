@@ -12,6 +12,7 @@ não repassa descritores extras (§8.1).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -168,7 +169,9 @@ class IpcChannel:
         ou alterar o alvo. Nomes únicos por execução evitam que duas execuções
         simultâneas do mesmo script apaguem os FIFOs uma da outra.
         """
-        base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")
+        # /tmp só sem XDG_RUNTIME_DIR: o mkdir sem exist_ok falha em qualquer
+        # caminho já existente (inclusive symlink plantado), então não há reuso
+        base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")  # noqa: S108
         base.mkdir(parents=True, exist_ok=True)
         ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
         try:
@@ -191,19 +194,13 @@ class IpcChannel:
             item.done.set()
         self._reader.join(timeout=2.0)
         for fd in (self._out_fd, self._in_fd):
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
         for path in (self.out_path, self.in_path):
-            try:
+            with contextlib.suppress(OSError):
                 path.unlink()
-            except OSError:
-                pass
-        try:
+        with contextlib.suppress(OSError):
             self._directory.rmdir()
-        except OSError:
-            pass
 
     def __enter__(self) -> "IpcChannel":
         return self
@@ -298,10 +295,8 @@ class IpcChannel:
             if request_id and str(message.get("t", "")) in PROMPT_KINDS:
                 with self._lock:
                     self._pending.pop(request_id, None)
-                try:
+                with contextlib.suppress(IpcError):
                     self._write(request_id, STATUS_CANCEL, "")
-                except IpcError:
-                    pass
 
     def _dispatch_message(self, message: dict[str, Any]) -> None:
         kind = str(message.get("t", ""))

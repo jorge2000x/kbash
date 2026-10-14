@@ -9,6 +9,7 @@ Invariantes (SPEC.md §3/§7/§14):
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 import shutil
@@ -79,6 +80,10 @@ class IpcChannel(Protocol):
     """Transporte de interação (§8) visto pelo executor."""
 
     directory: Path
+    #: variáveis de `rt_set` (§7.2), compartilhadas com o executor
+    variables: dict[str, str]
+    #: id do step atual, usado nas mensagens do IPC
+    step_id: str
 
     def close(self) -> None: ...
 
@@ -284,7 +289,7 @@ class Executor:
             )
             self._ipc = channel
             # §7.2 — rt_set alimenta as variáveis dos steps seguintes.
-            setattr(channel, "variables", self.variables)
+            channel.variables = self.variables
         self._emit(
             RunStarted(self.script.id, self.script.name, len(self.plan.selected), str(workdir))
         )
@@ -341,7 +346,7 @@ class Executor:
         env = self._build_env(step)
         argv, cwd = self._build_argv(step, env)
         if self._ipc is not None:
-            setattr(self._ipc, "step_id", step.id)
+            self._ipc.step_id = step.id
         self._emit(StepStarted(step.id, index, len(self.plan.selected)))
         try:
             process = subprocess.Popen(  # noqa: S603 - argv em lista, sem shell
@@ -414,10 +419,8 @@ class Executor:
         try:
             os.killpg(os.getpgid(process.pid), sig)
         except (ProcessLookupError, PermissionError, AttributeError):
-            try:
+            with contextlib.suppress(ProcessLookupError, ValueError):
                 process.send_signal(sig)
-            except (ProcessLookupError, ValueError):
-                pass
 
     # -- ambiente e comando ---------------------------------------------
     def _build_env(self, step: Step) -> dict[str, str]:
