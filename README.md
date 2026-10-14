@@ -4,9 +4,11 @@ Runtime que executa scripts bash anotados com uma interface gráfica
 (Qt 6 / QML / Kirigami). Um script comum vira um formulário com opções
 tipadas, etapas marcáveis e log ao vivo, sem reescrever a lógica.
 
-- `SPEC.md`: formato das anotações `#@...` e comportamento do runtime.
+- `docs/USO.md`: como abrir, configurar, executar e ler o resultado de um script.
+- `docs/AUTHORING.md`: como escrever um script `.kbash` do zero (cabeçalho, opções, steps, helpers `rt_*`, root).
 - `docs/PORTAR.md`: guia para transformar um script bash existente.
-- `examples/all-options.sh`: exemplo com todos os tipos de opção.
+- `SPEC.md`: formato das anotações `#@...` e comportamento do runtime.
+- `examples/`: exemplos prontos (`all-options.sh`, `setup-dev.sh`, `sober-optimizer.sh`, `fedora-superpoderoso.kbash`).
 
 Uso rápido:
 
