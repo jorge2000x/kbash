@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kbash.gui.library import DEV_SCRIPTS_DIR, list_library, program_scripts_dir
+from kbash.gui.library import DEV_SCRIPTS_DIR, list_library, program_scripts_dir, resolve_icon
 
 GOOD = (
     "#!/usr/bin/env bash\n#@runtime 1\n#@name Bom\n#@desc Faz algo\n"
@@ -62,3 +62,36 @@ def test_inside_appimage_the_program_folder_is_where_the_appimage_lives(
     monkeypatch.setenv("APPIMAGE", str(app / "kbash-x86_64.AppImage"))
     assert program_scripts_dir() == app
     assert [e.path.name for e in list_library()] == ["meu.kbash"]
+
+
+def test_icon_from_theme_name_and_from_assets_file(tmp_path: Path) -> None:
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "meu.svg").write_text("<svg/>", encoding="utf-8")
+    (tmp_path / "tema.kbash").write_text(
+        GOOD.replace("#@name Bom", "#@name Bom\n#@icon system-software-update"), encoding="utf-8")
+    (tmp_path / "arquivo.kbash").write_text(
+        GOOD.replace("#@name Bom", "#@name Bom\n#@icon meu.svg"), encoding="utf-8")
+    (tmp_path / "sem.kbash").write_text(GOOD, encoding="utf-8")
+    by = {e.path.name: e for e in list_library(tmp_path)}
+    assert (by["tema.kbash"].icon, by["tema.kbash"].icon_file) == ("system-software-update", "")
+    assert by["arquivo.kbash"].icon == ""
+    assert by["arquivo.kbash"].icon_file == str(tmp_path / "assets" / "meu.svg")
+    assert (by["sem.kbash"].icon, by["sem.kbash"].icon_file) == ("application-x-executable", "")
+
+
+def test_icon_file_missing_falls_back_to_default(tmp_path: Path) -> None:
+    (tmp_path / "x.kbash").write_text(
+        GOOD.replace("#@name Bom", "#@name Bom\n#@icon nao-existe.svg"), encoding="utf-8")
+    entry = list_library(tmp_path)[0]
+    assert (entry.icon, entry.icon_file) == ("application-x-executable", "")
+
+
+def test_resolve_icon_rules(tmp_path: Path) -> None:
+    script = tmp_path / "s.kbash"
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "a.png").write_bytes(b"x")
+    assert resolve_icon(None, script) == ("application-x-executable", "")
+    assert resolve_icon("utilities-terminal", script) == ("utilities-terminal", "")
+    assert resolve_icon("a.png", script) == ("", str(tmp_path / "assets" / "a.png"))
+    assert resolve_icon("pasta/a.png", script) == ("application-x-executable", "")
+    assert resolve_icon("/caminho/absoluto.svg", script) == ("application-x-executable", "")

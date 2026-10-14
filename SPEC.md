@@ -542,6 +542,12 @@ Há três caminhos, decididos nesta ordem:
    `.sh` pelo seletor do portal (`Escolher script…`) ou arrasta o arquivo para a
    janela. `Bridge.loadScript` valida (`.sh`, legível, parse sem erro) e troca o
    script sem reiniciar o app. Não há execução na home: `Bridge.start` recusa.
+   **Biblioteca:** abaixo dos controles, a home lista os `.kbash` da pasta do
+   programa (a pasta do `.AppImage`, via `APPIMAGE`; fora dele, `examples/`), com
+   ícone, nome e descrição. Leitura só estática (parser); arquivo inválido aparece
+   desabilitado. Clicar abre o script. O ícone segue a regra de `#@icon` (ver
+   `gui/library.py`, `resolve_icon`): nome do tema, ou arquivo em `assets/` (com `/`
+   ou terminado em `.svg`/`.png`); arquivo inexistente cai no ícone padrão.
 
 Um AppImage sem script embutido (`PAYLOAD= tools/build-appimage.sh ...`) é o
 runtime genérico, que abre sempre na home.

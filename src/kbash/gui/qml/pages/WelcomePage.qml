@@ -95,6 +95,8 @@ AppPage {
                 delegate: ItemDelegate {
                     Layout.fillWidth: true
                     enabled: modelData.valid
+                    icon.name: modelData.icon
+                    icon.source: modelData.iconFile
                     text: modelData.description !== ""
                         ? modelData.name + " — " + modelData.description
                         : modelData.name

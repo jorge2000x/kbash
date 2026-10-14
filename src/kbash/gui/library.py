@@ -29,12 +29,41 @@ def program_scripts_dir() -> Path:
     return DEV_SCRIPTS_DIR
 
 
+#: Ícone padrão, o mesmo do bridge quando o script não declara `#@icon`.
+DEFAULT_ICON = "application-x-executable"
+
+
 @dataclass(frozen=True)
 class LibraryEntry:
     path: Path
     name: str
     description: str
     valid: bool
+    #: nome de ícone do tema, ou "" quando o ícone é um arquivo
+    icon: str = DEFAULT_ICON
+    #: caminho do arquivo do ícone (`#@icon` relativo a `assets/`), ou ""
+    icon_file: str = ""
+
+
+#: Extensões que tornam `#@icon` um arquivo (e não um nome de tema).
+ICON_FILE_SUFFIXES = (".svg", ".png")
+
+
+def resolve_icon(icon: str | None, script_path: Path, assets: Path | None = None) -> tuple[str, str]:
+    """`#@icon` → (nome do tema, caminho do arquivo); só um dos dois vem preenchido.
+
+    Arquivo: contém ``/`` ou termina em ``.svg``/``.png``; relativo a ``assets/`` (ao lado
+    do script, ou ``assets`` do payload). Arquivo inexistente cai no ícone padrão.
+    """
+    name = icon or ""
+    if not name:
+        return DEFAULT_ICON, ""
+    if "/" not in name and not name.lower().endswith(ICON_FILE_SUFFIXES):
+        return name, ""
+    candidate = Path(name)
+    if not candidate.is_absolute():
+        candidate = (assets or script_path.parent / "assets") / candidate
+    return ("", str(candidate)) if candidate.is_file() else (DEFAULT_ICON, "")
 
 
 def list_library(folder: Path | None = None) -> list[LibraryEntry]:
@@ -55,5 +84,6 @@ def list_library(folder: Path | None = None) -> list[LibraryEntry]:
         except (KbashError, OSError):
             entries.append(LibraryEntry(path, path.stem, "não pôde ser lido", valid=False))
             continue
-        entries.append(LibraryEntry(path, script.name, script.description, valid=True))
+        icon, icon_file = resolve_icon(script.icon, path)
+        entries.append(LibraryEntry(path, script.name, script.description, True, icon, icon_file))
     return entries
