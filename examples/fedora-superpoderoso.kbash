@@ -5,11 +5,12 @@
 #   - o bloco de DNS do guia tinha `&& \` antes do heredoc, o que faz o conteúdo do
 #     arquivo ser executado como comando. Aqui o heredoc está na forma correta;
 #   - `flatpak remote-delete fedora` só roda se o remote existir (senão o `set -e`
-#     pararia o passo por algo que já está resolvido).
+#     pararia o passo por algo que já está resolvido);
+#   - sem `sudo` nos comandos: o privilégio vem da elevação do kbash (SPEC.md §9.2).
 # Tudo que altera kernel, boot, DNS ou shell começa DESLIGADO e pede confirmação.
-# Passos com `sudo` precisam de privilégio elevado (#@root true): nesta versão do
-# kbash a elevação está desligada (SPEC.md §7.5), então use `kbash plan` para revisar
-# e rode-os só com a elevação disponível.
+# Passos marcados com `#@root true` rodam como root via pkexec (SPEC.md §9.2) e por isso
+# não chamam `sudo` por dentro. Nesta versão do kbash a elevação ainda está desligada:
+# esses passos falham sem privilégio. Use `kbash plan` para revisar antes.
 #@runtime 1
 #@name Fedora Super Poderoso
 #@description Pós-instalação do Fedora 44: repositórios, codecs, drivers, Flatpak e ajustes opcionais.
@@ -57,9 +58,9 @@ ativo() {
 #@group Essencial
 #@root true
 atualizar_sistema() {
-    sudo dnf upgrade --refresh -y
+    dnf upgrade --refresh -y
     if rt_confirm "Reiniciar agora para aplicar as atualizações?" n; then
-        sudo reboot
+        reboot
     else
         rt_notify "Reinicie quando puder para aplicar as atualizações."
     fi
@@ -73,15 +74,15 @@ atualizar_sistema() {
 #@root true
 repos_rpmfusion() {
     # Etapa 1: Free e Nonfree (instala direto via URL)
-    sudo dnf install -y \
+    dnf install -y \
         "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" \
         "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"
 
     # Etapa 2: Tainted (agora que os repositórios estão disponíveis)
-    sudo dnf install -y rpmfusion-free-release-tainted rpmfusion-nonfree-release-tainted
+    dnf install -y rpmfusion-free-release-tainted rpmfusion-nonfree-release-tainted
 
     # Metadados para o GNOME Software/Discover mostrarem apps do RPM Fusion
-    sudo dnf install -y rpmfusion-free-appstream-data rpmfusion-nonfree-appstream-data
+    dnf install -y rpmfusion-free-appstream-data rpmfusion-nonfree-appstream-data
 }
 
 #@step dnf_paralelo
@@ -91,7 +92,7 @@ repos_rpmfusion() {
 #@depends repos_rpmfusion
 #@root true
 dnf_paralelo() {
-    sudo dnf config-manager setopt parallel_downloads=10
+    dnf config-manager setopt parallel_downloads=10
 }
 
 #@step codecs
@@ -102,15 +103,15 @@ dnf_paralelo() {
 #@root true
 codecs() {
     # Trocar ffmpeg-free pelo ffmpeg completo
-    sudo dnf swap -y ffmpeg-free ffmpeg --allowerasing
+    dnf swap -y ffmpeg-free ffmpeg --allowerasing
 
     # Grupo de codecs do RPM Fusion
-    sudo dnf groupupdate -y multimedia --setopt="install_weak_deps=False" --exclude=PackageKit-gstreamer-plugin
+    dnf groupupdate -y multimedia --setopt="install_weak_deps=False" --exclude=PackageKit-gstreamer-plugin
 
     # Codecs essenciais
-    sudo dnf install -y x264 x265 fdk-aac pipewire-codec-aptx libldac svt-av1
-    sudo dnf install -y gstreamer1-plugins-bad-freeworld gstreamer1-libav
-    sudo dnf install -y mozilla-openh264 gstreamer1-plugin-openh264
+    dnf install -y x264 x265 fdk-aac pipewire-codec-aptx libldac svt-av1
+    dnf install -y gstreamer1-plugins-bad-freeworld gstreamer1-libav
+    dnf install -y mozilla-openh264 gstreamer1-plugin-openh264
 }
 
 #@step dvd_passo
@@ -122,7 +123,7 @@ codecs() {
 #@root true
 dvd_passo() {
     if ! ativo "$OPT_DVD"; then pular "DVD/Blu-ray (opção desmarcada)"; return 0; fi
-    sudo dnf install -y libdvdcss libaacs libbdplus
+    dnf install -y libdvdcss libaacs libbdplus
 }
 
 #@step firmwares
@@ -131,8 +132,8 @@ dvd_passo() {
 #@group Firmware
 #@root true
 firmwares() {
-    sudo fwupdmgr refresh
-    sudo fwupdmgr update
+    fwupdmgr refresh
+    fwupdmgr update
 }
 
 #@step firmware_wifi_broadcom
@@ -144,7 +145,7 @@ firmwares() {
 #@root true
 firmware_wifi_broadcom() {
     if ! ativo "$OPT_WIFI_BROADCOM"; then pular "Wi-Fi Broadcom (opção desmarcada)"; return 0; fi
-    sudo dnf install -y b43-firmware
+    dnf install -y b43-firmware
 }
 
 #@step firmware_bt_broadcom
@@ -156,7 +157,7 @@ firmware_wifi_broadcom() {
 #@root true
 firmware_bt_broadcom() {
     if ! ativo "$OPT_BT_BROADCOM"; then pular "Bluetooth Broadcom (opção desmarcada)"; return 0; fi
-    sudo dnf install -y broadcom-bt-firmware
+    dnf install -y broadcom-bt-firmware
 }
 
 #@step drivers_gpu
@@ -173,20 +174,20 @@ drivers_gpu() {
                 pular "NVIDIA (sem confirmação de Secure Boot)"
                 return 0
             fi
-            sudo dnf install -y akmod-nvidia
-            sudo dnf install -y xorg-x11-drv-nvidia-cuda
+            dnf install -y akmod-nvidia
+            dnf install -y xorg-x11-drv-nvidia-cuda
             rt_notify "Espere uns 15 minutos para o driver compilar e depois reinicie."
             ;;
         amd)
-            sudo dnf install -y mesa-va-drivers-freeworld
+            dnf install -y mesa-va-drivers-freeworld
             ;;
         intel-nova)
             # Intel 11ª geração ou mais nova, e Arc
-            sudo dnf install -y intel-media-driver
+            dnf install -y intel-media-driver
             ;;
         intel-antiga)
             # Intel 10ª geração ou anterior
-            sudo dnf install -y libva-intel-driver
+            dnf install -y libva-intel-driver
             ;;
         *)
             pular "drivers de vídeo (nenhuma placa escolhida)"
@@ -216,7 +217,7 @@ configurar_flatpak() {
 #@depends atualizar_sistema
 #@root true
 snapshots() {
-    sudo dnf install -y btrfs-assistant
+    dnf install -y btrfs-assistant
 }
 
 #@step essenciais
@@ -226,7 +227,7 @@ snapshots() {
 #@depends configurar_flatpak
 #@root true
 essenciais() {
-    sudo dnf install -y webkit2gtk4.1 gtk3 librsvg2 libappindicator-gtk3 exfatprogs ntfs-3g fuse fuse-libs fastfetch
+    dnf install -y webkit2gtk4.1 gtk3 librsvg2 libappindicator-gtk3 exfatprogs ntfs-3g fuse fuse-libs fastfetch
     flatpak install -y flathub it.mijorus.gearlever
     flatpak install -y flathub io.github.flattool.Warehouse
     flatpak install -y flathub com.github.tchx84.Flatseal
@@ -240,8 +241,8 @@ essenciais() {
 #@depends essenciais
 #@root true
 limpeza() {
-    sudo dnf autoremove -y
-    sudo dnf clean all
+    dnf autoremove -y
+    dnf clean all
 }
 
 # ---------------------------------------------------------------------------
@@ -259,15 +260,15 @@ scheduler_ebpf_passo() {
     if ! rt_confirm "Adicionar o COPR bieszczaders/kernel-cachyos-addons e instalar o scheduler?" n; then
         pular "scheduler eBPF (não confirmado)"; return 0
     fi
-    sudo dnf copr enable -y bieszczaders/kernel-cachyos-addons
-    sudo dnf install -y scx-scheds scx-tools
+    dnf copr enable -y bieszczaders/kernel-cachyos-addons
+    dnf install -y scx-scheds scx-tools
 
-    sudo mkdir -p /etc/scx_loader
-    sudo tee /etc/scx_loader/config.toml > /dev/null << 'EOF'
+    mkdir -p /etc/scx_loader
+    tee /etc/scx_loader/config.toml > /dev/null << 'EOF'
 default_sched = "scx_lavd"
 default_mode = "Auto"
 EOF
-    sudo systemctl enable --now scx_loader.service
+    systemctl enable --now scx_loader.service
 }
 
 #@step preempt_lazy_passo
@@ -282,7 +283,7 @@ preempt_lazy_passo() {
     if ! rt_confirm "Adicionar preempt=lazy a todos os kernels? (vale no próximo boot)" n; then
         pular "preempt=lazy (não confirmado)"; return 0
     fi
-    sudo grubby --update-kernel=ALL --args="preempt=lazy"
+    grubby --update-kernel=ALL --args="preempt=lazy"
     rt_notify "Para verificar depois do boot: sudo dmesg | grep -i 'dynamic preempt' (deve mostrar lazy)"
 }
 
@@ -297,8 +298,8 @@ zram_passo() {
     if ! ativo "$OPT_ZRAM_CUSTOM"; then pular "zram"; return 0; fi
     local tamanho="ram"
     [ "$OPT_ZRAM_SIZE" = "ram / 2" ] && tamanho="ram / 2"
-    sudo mkdir -p /etc/systemd/zram-generator.conf.d
-    sudo tee /etc/systemd/zram-generator.conf.d/custom.conf > /dev/null << EOF
+    mkdir -p /etc/systemd/zram-generator.conf.d
+    tee /etc/systemd/zram-generator.conf.d/custom.conf > /dev/null << EOF
 [zram0]
 zram-size = $tamanho
 compression-algorithm = lz4
@@ -314,7 +315,7 @@ EOF
 #@root true
 sysctl_zram_passo() {
     if ! ativo "$OPT_SYSCTL_ZRAM"; then pular "ajuste de memória"; return 0; fi
-    sudo tee /etc/sysctl.d/99-zram-tuning.conf > /dev/null << 'EOF'
+    tee /etc/sysctl.d/99-zram-tuning.conf > /dev/null << 'EOF'
 vm.swappiness = 100
 vm.page-cluster = 0
 vm.vfs_cache_pressure = 135
@@ -324,7 +325,7 @@ vm.watermark_scale_factor = 15
 vm.min_free_kbytes = 185072
 vm.watermark_boost_factor = 0
 EOF
-    sudo sysctl --system
+    sysctl --system
 }
 
 #@step dns_adguard_passo
@@ -339,14 +340,14 @@ dns_adguard_passo() {
     if ! rt_confirm "Trocar o DNS do sistema pelo AdGuard? Se a rede falhar, reverta removendo o arquivo adguard.conf." n; then
         pular "DNS AdGuard (não confirmado)"; return 0
     fi
-    sudo mkdir -p /etc/systemd/resolved.conf.d
-    sudo tee /etc/systemd/resolved.conf.d/adguard.conf > /dev/null << 'EOF'
+    mkdir -p /etc/systemd/resolved.conf.d
+    tee /etc/systemd/resolved.conf.d/adguard.conf > /dev/null << 'EOF'
 [Resolve]
 DNS=94.140.14.14#dns.adguard-dns.com 94.140.15.15#dns.adguard-dns.com
 DNSOverTLS=yes
 DNSSEC=allow-downgrade
 EOF
-    sudo systemctl restart systemd-resolved
+    systemctl restart systemd-resolved
 }
 
 #@step boot_rapido_passo
@@ -358,7 +359,7 @@ EOF
 #@root true
 boot_rapido_passo() {
     if ! ativo "$OPT_BOOT_RAPIDO"; then pular "boot rápido"; return 0; fi
-    sudo systemctl disable NetworkManager-wait-online.service
+    systemctl disable NetworkManager-wait-online.service
 }
 
 #@step io_scheduler_passo
@@ -375,19 +376,19 @@ io_scheduler_passo() {
     fi
     rt_log "scheduler atual de nvme0n1: $(cat /sys/block/nvme0n1/queue/scheduler 2>/dev/null || echo 'não encontrado')"
 
-    sudo tee /etc/udev/rules.d/60-nvme-scheduler.rules > /dev/null << 'EOF'
+    tee /etc/udev/rules.d/60-nvme-scheduler.rules > /dev/null << 'EOF'
 # NVMe: sem scheduler, o controle é feito pelo próprio drive
 ACTION=="add|change", KERNEL=="nvme[0-9]*", ATTR{queue/scheduler}="none"
 EOF
-    sudo tee /etc/udev/rules.d/62-ssd-scheduler.rules > /dev/null << 'EOF'
+    tee /etc/udev/rules.d/62-ssd-scheduler.rules > /dev/null << 'EOF'
 # SSD SATA: mq-deadline é simples e eficiente
 ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="mq-deadline"
 EOF
-    sudo tee /etc/udev/rules.d/61-hdd-scheduler.rules > /dev/null << 'EOF'
+    tee /etc/udev/rules.d/61-hdd-scheduler.rules > /dev/null << 'EOF'
 # HDD: bfq prioriza latência e é bom para discos mecânicos
 ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="1", ATTR{queue/scheduler}="bfq"
 EOF
-    sudo udevadm control --reload-rules && sudo udevadm trigger
+    udevadm control --reload-rules && udevadm trigger
 }
 
 #@step fish_passo
@@ -402,10 +403,10 @@ fish_passo() {
     if ! rt_confirm "Trocar o shell padrão pelo fish? Scripts que dependem do bash podem quebrar." n; then
         pular "fish (não confirmado)"; return 0
     fi
-    sudo dnf install -y fish
-    sudo dnf install -y util-linux-user
-    command -v fish | sudo tee -a /etc/shells
-    chsh -s /usr/bin/fish
+    dnf install -y fish
+    dnf install -y util-linux-user
+    command -v fish | tee -a /etc/shells
+    chsh -s /usr/bin/fish "$USER"
 }
 
 #@step cstate_passo
@@ -420,7 +421,7 @@ cstate_passo() {
     if ! rt_confirm "Adicionar processor.max_cstate=1 ao kernel? Só faz sentido em AMD com esse problema." n; then
         pular "max_cstate (não confirmado)"; return 0
     fi
-    sudo grubby --update-kernel=ALL --args="processor.max_cstate=1"
+    grubby --update-kernel=ALL --args="processor.max_cstate=1"
 }
 
 #@step fontes_passo
@@ -432,5 +433,5 @@ cstate_passo() {
 #@root true
 fontes_passo() {
     if ! ativo "$OPT_FONTES"; then pular "freetype-freeworld"; return 0; fi
-    sudo dnf install -y freetype-freeworld
+    dnf install -y freetype-freeworld
 }
