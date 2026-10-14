@@ -185,7 +185,7 @@ install_deps() {
 | `#@default on\|off` | Marcado por padrão? Padrão `on`. |
 | `#@required` | Step obrigatório: sempre selecionado, não pode ser desmarcado. |
 | `#@depends id1,id2` | Dependências. Marcar este step marca as dependências automaticamente. |
-| `#@root true` | Step exige privilégios de root (ver §9.2; hoje desligado). |
+| `#@root true` | Step exige privilégios de root (ver §9.2). |
 | `#@timeout N` | Timeout em segundos (padrão: sem limite). |
 | `#@on_error stop\|continue` | O que fazer se este step falhar. Padrão `stop`. |
 
@@ -501,12 +501,19 @@ Regras:
 - Valores de `rt_secret` e opções `type=password` nunca vão para logs (nem para o arquivo de log persistente).
 
 ### 9.2 Elevação de privilégio
-- **Desligada por enquanto** (`PRIVILEGE_ELEVATION = False` em `core/executor.py`):
-  steps `#@root true` rodam como usuário comum, sem pedir senha e sem `pkexec`.
-- Desenho futuro (não implementar sem pedir): steps `#@root true` rodam com
-  `pkexec env <vars> bash ...`, repassando só as variáveis `RT_*`/`OPT_*`
-  necessárias; a GUI avisa antes de executar quais steps pedem privilégios.
-- Scripts **não** devem chamar `sudo` por dentro (não há TTY); documentar em `docs/PORTAR.md`.
+- **Ligada** (`PRIVILEGE_ELEVATION = True` em `core/executor.py`). Steps `#@root true`
+  rodam com `pkexec env -i <vars> bash ...`, repassando só as variáveis `RT_*`/`OPT_*`
+  e as de ambiente listadas em `ROOT_PASSTHROUGH`.
+- **Autorização:** a GUI mostra o plano (com os steps que pedem root) e só depois o
+  usuário confirma a execução. Então o `Executor.run` pede autorização uma vez com
+  `pkexec true`, que mostra o diálogo do sistema (polkit), **antes do primeiro step**.
+  Se o diálogo for cancelado, a senha estiver errada ou o pkexec não existir, a
+  execução para com erro de pré-checagem e nenhum step roda.
+- Quando os steps root rodam, cada um passa pelo `pkexec` de novo. Se o polkit do
+  sistema mantiver a autorização em cache, não há novo diálogo; se não, o usuário
+  verá um diálogo por step (a confirmar em um Fedora real).
+- Scripts **não** devem chamar `sudo` por dentro (não há TTY): o passo `#@root true`
+  já roda como root. Documentar em `docs/PORTAR.md`.
 
 ### 9.3 Logs persistentes
 Planejado: `$XDG_STATE_HOME/<id>/logs/AAAA-MM-DD_HH-MM-SS.log`, com timestamp, step e stream por linha, mantendo os últimos 20. **Não implementado** (Fase 6). Hoje o log só existe na tela e pode ser salvo pelo usuário (*Salvar log*).

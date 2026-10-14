@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import threading
 import time
@@ -59,8 +60,22 @@ def failing_script():
     return parse_script(Path(__file__).parent / "fixtures" / "scripts" / "failing.sh")
 
 
+@pytest.fixture(autouse=True)
+def _pkexec_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Finge que o pkexec existe: os testes não devem depender do polkit do host."""
+    real_which = shutil.which
+    monkeypatch.setattr(
+        "kbash.core.executor.shutil.which",
+        lambda name, *a, **k: "/usr/bin/pkexec" if name == "pkexec" else real_which(name, *a, **k),
+    )
+
+
 def make(script, select=None, options=None, **kwargs) -> Executor:
     plan = build_plan(script, select, options, home=os.environ.get("HOME"))
+    # por padrão a autorização de root é concedida; testes de autorização passam a sua
+    kwargs.setdefault("authorize", lambda: True)
+    # sem pkexec real no teste: o comando de root é identidade (o wrapping tem teste próprio)
+    kwargs.setdefault("root_command", lambda argv, env, cwd: list(argv))
     return Executor(script, plan, helpers=HELPERS, **kwargs)
 
 
@@ -351,15 +366,10 @@ def test_precheck_required_option(dev_script) -> None:
     assert any("Nome para o git" in problem for problem in executor.precheck())
 
 
-def test_precheck_root_does_not_block_while_elevation_is_disabled(dev_script) -> None:
-    # Elevação desligada: mesmo com pkexec ausente nada impede o step root.
-    monkey = pytest.MonkeyPatch()
-    monkey.setattr("kbash.core.executor.shutil.which", lambda name: None)
-    try:
-        executor = make(dev_script, ["update_index"], {"user_name": "Ana"})
-        assert executor.precheck() == []
-    finally:
-        monkey.undo()
+def test_precheck_requires_pkexec_for_root_steps(dev_script, monkeypatch) -> None:
+    monkeypatch.setattr("kbash.core.executor.shutil.which", lambda name: None)
+    executor = make(dev_script, ["update_index"], {"user_name": "Ana"})
+    assert any("pkexec" in problem for problem in executor.precheck())
 
 
 def test_precheck_empty_selection(dev_script) -> None:
@@ -367,11 +377,11 @@ def test_precheck_empty_selection(dev_script) -> None:
     assert any("nenhum step" in problem for problem in executor.precheck())
 
 
-# -- root (§9.2, elevação desligada por enquanto) ----------------------------
-def test_privilege_elevation_is_disabled() -> None:
+# -- root (§9.2) -------------------------------------------------------------
+def test_privilege_elevation_is_enabled() -> None:
     from kbash.core import executor as module
 
-    assert module.PRIVILEGE_ELEVATION is False
+    assert module.PRIVILEGE_ELEVATION is True
 
 
 def test_root_command_repasses_only_rt_and_opt() -> None:
@@ -389,7 +399,7 @@ def test_root_command_repasses_only_rt_and_opt() -> None:
     assert argv[-3:] == ["bash", "-c", "x"]
 
 
-def test_root_step_does_not_ask_for_privileges(tmp_path: Path) -> None:
+def test_root_step_runs_through_root_command_after_authorization(tmp_path: Path) -> None:
     target = tmp_path / "root.sh"
     target.write_text(
         "#!/usr/bin/env bash\n#@runtime 1\n#@name Root\n#@step ola\n#@root true\n"
@@ -400,14 +410,95 @@ def test_root_step_does_not_ask_for_privileges(tmp_path: Path) -> None:
 
     def fake_root(argv, env, cwd):  # noqa: ANN001, ANN202
         calls.append(list(argv))
-        return ["true"]
+        return list(argv)  # identidade: roda o bash sem pkexec de verdade
 
     collector = Collector()
     result = make(parse_script(target), root_command=fake_root).run(collector)
     assert result.status is RunState.SUCCESS
     assert "hi" in collector.logs
-    assert calls == []  # nada pediu privilégio
+    assert len(calls) == 1 and calls[0][0] == "bash"
     assert script_step_root(target) is True
+
+
+def test_authorization_is_requested_once_before_any_step(tmp_path: Path) -> None:
+    target = tmp_path / "root.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name Root\n"
+        "#@step um\n#@root true\num() { echo um; }\n"
+        "#@step dois\n#@root true\ndois() { echo dois; }\n",
+        encoding="utf-8",
+    )
+    collector = Collector()
+    seen_when_asked: list[int] = []
+
+    def authorize() -> bool:
+        seen_when_asked.append(len(collector.events))  # nada deve ter rodado ainda
+        return True
+
+    result = make(
+        parse_script(target), root_command=lambda argv, env, cwd: list(argv), authorize=authorize
+    ).run(collector)
+    assert result.status is RunState.SUCCESS
+    assert seen_when_asked == [0]
+
+
+def test_denied_authorization_runs_nothing(tmp_path: Path) -> None:
+    marker = tmp_path / "rodou"
+    target = tmp_path / "root.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name Root\n"
+        f"#@step perigo\n#@root true\nperigo() {{ touch '{marker}'; }}\n",
+        encoding="utf-8",
+    )
+    called: list[object] = []
+    executor = make(
+        parse_script(target),
+        root_command=lambda argv, env, cwd: called.append(argv) or list(argv),
+        authorize=lambda: False,
+    )
+    with pytest.raises(PrecheckError, match="autorização de root negada"):
+        executor.run(Collector())
+    assert not marker.exists()
+    assert called == []
+
+
+def test_no_root_steps_means_no_authorization(tmp_path: Path) -> None:
+    target = tmp_path / "plain.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name Plano\n#@step ola\nola() { echo oi; }\n",
+        encoding="utf-8",
+    )
+    asked: list[bool] = []
+    result = make(parse_script(target), authorize=lambda: asked.append(True) or True).run(
+        Collector()
+    )
+    assert result.status is RunState.SUCCESS
+    assert asked == []
+
+
+def _fake_pkexec(bin_dir: Path, exit_code: int) -> None:
+    bin_dir.mkdir(exist_ok=True)
+    tool = bin_dir / "pkexec"
+    tool.write_text(f"#!/bin/sh\n[ \"$1\" = true ] && exit {exit_code}\nexit 99\n")
+    tool.chmod(0o755)
+
+
+def test_pkexec_authorize_reports_the_dialog_result(tmp_path: Path, monkeypatch) -> None:
+    from kbash.core.executor import pkexec_authorize
+
+    bin_dir = tmp_path / "bin"
+    monkeypatch.setenv("PATH", str(bin_dir))
+    _fake_pkexec(bin_dir, 0)
+    assert pkexec_authorize() is True
+    _fake_pkexec(bin_dir, 126)  # usuário cancelou o diálogo
+    assert pkexec_authorize() is False
+
+
+def test_pkexec_authorize_without_pkexec_is_false(tmp_path: Path, monkeypatch) -> None:
+    from kbash.core.executor import pkexec_authorize
+
+    monkeypatch.setenv("PATH", str(tmp_path / "vazio"))
+    assert pkexec_authorize() is False
 
 
 def script_step_root(target: Path) -> bool:

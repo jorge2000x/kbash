@@ -65,9 +65,9 @@ ROOT_PASSTHROUGH = (
 
 #: Elevação de privilégio (SPEC.md §9.2) **desligada por enquanto**: os steps
 #: ``#@root true`` rodam como qualquer outro, e o usuário nunca vê um pedido de
-#: senha. Ligar aqui passa a reativar a pré-checagem do pkexec e o wrapping
-#: ``pkexec env …`` (item pendente da Fase 6).
-PRIVILEGE_ELEVATION = False
+#: senha. Com a elevação ligada, o pkexec mostra o diálogo do sistema (polkit) uma
+#: vez, logo antes do primeiro step, depois que o usuário revisou o plano.
+PRIVILEGE_ELEVATION = True
 
 
 class IpcChannel(Protocol):
@@ -81,6 +81,29 @@ class IpcChannel(Protocol):
 def helpers_path() -> Path:
     """Caminho do ``rt.sh`` empacotado (§3, estrutura de pastas)."""
     return Path(__file__).resolve().parent.parent / "helpers" / "rt.sh"
+
+
+#: §9.2 — tempo máximo para o usuário digitar a senha no diálogo do sistema.
+AUTH_TIMEOUT = 300
+
+
+def pkexec_authorize() -> bool:
+    """§9.2 — pede autorização de root pelo diálogo do sistema (polkit), antes de começar.
+
+    ``pkexec true`` sem ``--disable-internal-agent`` deixa o agente gráfico do
+    desktop mostrar o diálogo. Devolve ``False`` se o pkexec não existir, se o
+    usuário cancelar ou se a senha estiver errada.
+    """
+    try:
+        done = subprocess.run(  # argv fixo, sem shell
+            ["pkexec", "true"],
+            stdin=subprocess.DEVNULL,
+            timeout=AUTH_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0
 
 
 def default_root_command(argv: Sequence[str], env: dict[str, str], cwd: str) -> list[str]:
@@ -174,6 +197,7 @@ class Executor:
         log_sink: Callable[[LogLine], None] | None = None,
         keep_workdir: bool = False,
         strict: bool | None = None,
+        authorize: Callable[[], bool] | None = None,
     ) -> None:
         self.script = script
         self.plan = plan or build_plan(script)
@@ -184,6 +208,8 @@ class Executor:
         self.log_sink = log_sink
         self.keep_workdir = keep_workdir
         self.strict = self.script.strict if strict is None else strict
+        #: §9.2 — autorização de root, pedida uma vez antes do primeiro step.
+        self.authorize = authorize or pkexec_authorize
         self.variables: dict[str, str] = {}
         self._emitter: EventSink = lambda event: None
         self._process: subprocess.Popen[bytes] | None = None
@@ -226,6 +252,13 @@ class Executor:
             problems = self.precheck()
             if problems:
                 raise PrecheckError("; ".join(problems))
+        # §9.2 — o diálogo do sistema aparece aqui: depois da revisão do plano
+        # (quem chama já mostrou a lista) e antes de qualquer step rodar.
+        if PRIVILEGE_ELEVATION and any(step.root for step in self.steps):
+            if not self.authorize():
+                raise PrecheckError(
+                    "autorização de root negada ou cancelada; nenhum step foi executado"
+                )
         result = RunResult()
         started = time.monotonic()
         self._tempdir = TemporaryDirectory(prefix="kbash-")  # noqa: SIM115 - limpo no finally
