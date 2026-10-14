@@ -7,7 +7,7 @@
 // borda do desmarcado é só 15% do texto e a caixa quase some no fundo. Aqui o
 // fundo da caixa sobe 10% em direção ao texto, a borda do desmarcado vai a 60%
 // (contraste ≥ 3:1 sobre o cartão, WCAG 1.4.11) e o marcado vira azul cheio com
-// o "check" claro. Só usa cores do Kirigami.Theme.
+// o "check" claro. Desmarcado tem fundo cinza. Só usa cores do Kirigami.Theme.
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
@@ -33,7 +33,12 @@ CheckBox {
         // está marcado é preta (é onde o contraste faltava). Azul cheio no marcado.
         Kirigami.Theme.textColor: "white"
 
-        color: marcado ? control.Kirigami.Theme.highlightColor : control.Kirigami.Theme.backgroundColor
+        // desmarcado: fundo cinza (35% do caminho do fundo ao texto), para a caixa
+        // aparecer em tema escuro e claro; marcado segue azul
+        color: marcado
+            ? control.Kirigami.Theme.highlightColor
+            : control._mistura(control.Kirigami.Theme.backgroundColor,
+                               control.Kirigami.Theme.textColor, 0.35)
         border.color: marcado || control.down || control.visualFocus || control.hovered
             ? control.Kirigami.Theme.highlightColor
             : "black"
