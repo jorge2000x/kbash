@@ -16,9 +16,12 @@ AppPage {
     AppCard {
         Layout.fillWidth: true
         title: qsTr("Opções")
-        subtitle: bridge.optionCount > 0
+        // o cartão fica sempre (estrutura estável, §10.4); sem opções gerais, diz onde estão
+        subtitle: bridge.generalOptionCount > 0
             ? qsTr("Preencha antes de executar.")
-            : qsTr("Este script não pede opções.")
+            : bridge.optionCount > 0
+                ? qsTr("As opções ficam junto das etapas que configuram.")
+                : qsTr("Este script não pede opções.")
 
         // só as opções gerais; as ligadas a um step ficam dentro da linha do step
         Repeater {
@@ -62,6 +65,9 @@ AppPage {
 
         ListView {
             id: stepsView
+            // reaproveita as linhas ao rolar (cache de delegates) em vez de recriar StepRow
+            reuseItems: true
+            cacheBuffer: 400
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(contentHeight, 400)
             Layout.minimumHeight: 60

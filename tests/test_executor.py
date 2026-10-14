@@ -22,7 +22,7 @@ from kbash.core.events import (
     StepFinished,
     StepStarted,
 )
-from kbash.core.executor import Executor, default_root_command
+from kbash.core.executor import ROOT_HOME, ROOT_PATH, Executor, default_root_command
 from kbash.core.ipc import IpcChannel
 from kbash.core.model import RunState, StepState
 from kbash.core.parser import parse_script
@@ -390,13 +390,27 @@ def test_root_command_repasses_only_rt_and_opt() -> None:
         "RT_SCRIPT": "/tmp/a.sh", "RT_STEP_ID": "x",
     }
     argv = default_root_command(["bash", "-c", "x"], env, "/home/x")
-    assert argv[:2] == ["pkexec", "env"]
-    assert "-i" in argv
-    assert "PATH=/usr/bin" in argv
+    assert argv[:3] == ["pkexec", "/usr/bin/env", "-i"]
     assert "RT_STEP_ID=x" in argv
     assert "OPT_NOME=Ana" in argv
     assert not any(item.startswith("SECRET=") for item in argv)
     assert argv[-3:] == ["bash", "-c", "x"]
+
+
+def test_root_command_never_passes_the_user_path_or_home() -> None:
+    """Regressão: o PATH do usuário chegava ao root; um ~/bin/dnf rodava como root."""
+    env = {"PATH": "/home/ana/bin:/usr/bin", "HOME": "/home/ana", "USER": "ana"}
+    argv = default_root_command(["bash", "-c", "x"], env, "/home/ana")
+    assert f"PATH={ROOT_PATH}" in argv
+    assert f"HOME={ROOT_HOME}" in argv
+    assert not any("/home/ana" in item for item in argv)
+    assert "PATH=/home/ana/bin:/usr/bin" not in argv
+
+
+def test_root_command_path_is_absolute_system_dirs_only() -> None:
+    entries = ROOT_PATH.split(":")
+    assert all(entry.startswith("/") for entry in entries)
+    assert "/home" not in ROOT_PATH and "~" not in ROOT_PATH
 
 
 def test_root_step_runs_through_root_command_after_authorization(tmp_path: Path) -> None:
@@ -603,3 +617,57 @@ def test_signals_are_ignored_by_step_children(tmp_path: Path) -> None:
 
 def test_signal_module_is_not_used_with_shell() -> None:
     assert signal.SIGTERM and os.name == "posix"
+
+
+# -- rt_set com chave inválida não derruba o run (§7.2) ----------------------
+def test_invalid_rt_set_key_does_not_crash_the_run(tmp_path: Path) -> None:
+    target = tmp_path / "setkeys.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name SetKeys\n"
+        "#@step gravar\n"
+        "gravar() {\n"
+        '  rt_set "x y" 1\n'
+        '  rt_set "a=b" 2\n'
+        '  rt_set lower a\n'
+        '  rt_set LOWER b\n'
+        "}\n"
+        "#@step conferir\n#@depends gravar\n"
+        'conferir() {\n  [ "$RT_VAR_LOWER" = b ] || rt_fail "RT_VAR_LOWER errado"\n}\n',
+        encoding="utf-8",
+    )
+    collector = Collector()
+    result = make(parse_script(target), ipc_factory=IpcChannel).run(collector)
+    assert result.status is RunState.SUCCESS
+    assert any("chave inválida" in getattr(e, "text", "") for e in collector.events)
+
+
+def test_popen_value_error_fails_only_that_step(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "popen.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name Popen\n#@step a\na() { :; }\n",
+        encoding="utf-8",
+    )
+
+    def boom(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise ValueError("illegal environment variable name")
+
+    monkeypatch.setattr("kbash.core.executor.subprocess.Popen", boom)
+    collector = Collector()
+    result = make(parse_script(target)).run(collector)
+    assert result.status is RunState.FAILED
+    assert any("não foi possível iniciar" in getattr(e, "text", "") for e in collector.events)
+
+
+def test_rt_fail_without_message_still_reports_the_step(tmp_path: Path) -> None:
+    target = tmp_path / "failempty.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name FailEmpty\n"
+        "#@step vazio\nvazio() { rt_fail; }\n",
+        encoding="utf-8",
+    )
+    collector = Collector()
+    result = make(parse_script(target), ipc_factory=IpcChannel).run(collector)
+    assert result.status is RunState.FAILED
+    assert any(
+        getattr(e, "text", "") == "falha no step vazio" for e in collector.events
+    )

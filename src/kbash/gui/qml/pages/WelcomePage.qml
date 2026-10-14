@@ -83,6 +83,26 @@ AppPage {
             onClicked: bridge.pickOpenFile("home-open", qsTr("Escolher script"), false)
         }
 
+        // scripts .kbash da pasta do programa (gui/library.py), abaixo do que já existe
+        AppCard {
+            Layout.fillWidth: true
+            visible: bridge.libraryEntries.length > 0
+            title: qsTr("Scripts do programa")
+            subtitle: qsTr("Abra direto um script desta pasta.")
+
+            Repeater {
+                model: bridge.libraryEntries
+                delegate: ItemDelegate {
+                    Layout.fillWidth: true
+                    enabled: modelData.valid
+                    text: modelData.description !== ""
+                        ? modelData.name + " — " + modelData.description
+                        : modelData.name
+                    onClicked: bridge.loadScript(modelData.path)
+                }
+            }
+        }
+
         Item { Layout.fillHeight: true }
     }
 

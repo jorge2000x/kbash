@@ -119,29 +119,36 @@ Rectangle {
             }
 
             // opções ligadas a este step (needs_step, SPEC §4.3): aparecem junto dele
-            // quando o step está selecionado, e somem quando ele é desmarcado
+            // quando o step está selecionado, e somem quando ele é desmarcado.
+            // O Loader só cria o OptionField quando a opção é deste step e está
+            // visível: as demais opções do script não viram controles aqui (cada
+            // linha teria 5 campos inteiros escondidos). O valor fica no modelo
+            // (bridge.setOption) e volta quando o campo reaparece.
             Repeater {
                 model: bridge.options
-                delegate: OptionField {
+                delegate: Loader {
                     Layout.fillWidth: true
-                    visible: model.visible && model.owner === root.stepId
-                    optId: model.optId
-                    type: model.type
-                    label: model.label
-                    value: model.value
-                    choices: model.choices
-                    required: model.required
-                    error: model.error
-                    help: model.help
-                    minimum: model.minimum
-                    maximum: model.maximum
-                    step: model.step
-                    filters: model.filters
-                    url: model.url
-                    pattern: model.pattern
-                    minlen: model.minlen
-                    maxlen: model.maxlen
-                    multiple: model.multiple
+                    active: model.visible && model.owner === root.stepId
+                    visible: active
+                    sourceComponent: OptionField {
+                        optId: model.optId
+                        type: model.type
+                        label: model.label
+                        value: model.value
+                        choices: model.choices
+                        required: model.required
+                        error: model.error
+                        help: model.help
+                        minimum: model.minimum
+                        maximum: model.maximum
+                        step: model.step
+                        filters: model.filters
+                        url: model.url
+                        pattern: model.pattern
+                        minlen: model.minlen
+                        maxlen: model.maxlen
+                        multiple: model.multiple
+                    }
                 }
             }
 

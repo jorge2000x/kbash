@@ -9,6 +9,7 @@ Invariantes (SPEC.md §3/§7/§14):
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 import shutil
@@ -32,6 +33,7 @@ from .events import (
     StepFinished,
     StepStarted,
 )
+from .ipc import valid_var_key
 from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
 
@@ -58,8 +60,12 @@ STEP_COMMAND = (
 )
 
 #: §9.2 — variáveis repassadas ao pkexec além de RT_* / OPT_*.
+#: PATH e HOME do root são fixos: um PATH do usuário deixaria um binário
+#: sombreado em ~/bin rodar como root (SPEC.md §9.2).
+ROOT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ROOT_HOME = "/root"
 ROOT_PASSTHROUGH = (
-    "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "DISPLAY",
+    "USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "DISPLAY",
     "XAUTHORITY", "XDG_RUNTIME_DIR", "XDG_DATA_DIRS",
 )
 
@@ -74,6 +80,10 @@ class IpcChannel(Protocol):
     """Transporte de interação (§8) visto pelo executor."""
 
     directory: Path
+    #: variáveis de `rt_set` (§7.2), compartilhadas com o executor
+    variables: dict[str, str]
+    #: id do step atual, usado nas mensagens do IPC
+    step_id: str
 
     def close(self) -> None: ...
 
@@ -108,13 +118,16 @@ def pkexec_authorize() -> bool:
 
 def default_root_command(argv: Sequence[str], env: dict[str, str], cwd: str) -> list[str]:
     """§9.2 — ``pkexec env <vars> bash ...``, repassando só o necessário."""
-    exported = [f"{key}={env[key]}" for key in ROOT_PASSTHROUGH if key in env]
+    exported = [f"PATH={ROOT_PATH}", f"HOME={ROOT_HOME}"]
+    exported += [f"{key}={env[key]}" for key in ROOT_PASSTHROUGH if key in env]
     exported += [
         f"{key}={value}"
         for key, value in sorted(env.items())
         if key.startswith(("RT_", "OPT_"))
     ]
-    return ["pkexec", "env", "-i", *exported, *argv]
+    # /usr/bin/env absoluto: o pkexec executa o programa como root, e um
+    # `env` resolvido pelo PATH do usuário rodaria código dele como root
+    return ["pkexec", "/usr/bin/env", "-i", *exported, *argv]
 
 
 @dataclass
@@ -276,7 +289,7 @@ class Executor:
             )
             self._ipc = channel
             # §7.2 — rt_set alimenta as variáveis dos steps seguintes.
-            setattr(channel, "variables", self.variables)
+            channel.variables = self.variables
         self._emit(
             RunStarted(self.script.id, self.script.name, len(self.plan.selected), str(workdir))
         )
@@ -333,7 +346,7 @@ class Executor:
         env = self._build_env(step)
         argv, cwd = self._build_argv(step, env)
         if self._ipc is not None:
-            setattr(self._ipc, "step_id", step.id)
+            self._ipc.step_id = step.id
         self._emit(StepStarted(step.id, index, len(self.plan.selected)))
         try:
             process = subprocess.Popen(  # noqa: S603 - argv em lista, sem shell
@@ -345,7 +358,7 @@ class Executor:
                 stderr=subprocess.PIPE,
                 start_new_session=True,
             )
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError: nome/valor de env inválido
             self._log(step.id, "kbash", f"não foi possível iniciar o step: {exc}", "error")
             return self._finish(step, StepState.FAILED, None, started, str(exc))
         with self._lock:
@@ -406,10 +419,8 @@ class Executor:
         try:
             os.killpg(os.getpgid(process.pid), sig)
         except (ProcessLookupError, PermissionError, AttributeError):
-            try:
+            with contextlib.suppress(ProcessLookupError, ValueError):
                 process.send_signal(sig)
-            except (ProcessLookupError, ValueError):
-                pass
 
     # -- ambiente e comando ---------------------------------------------
     def _build_env(self, step: Step) -> dict[str, str]:
@@ -430,7 +441,8 @@ class Executor:
         for option_id, value in self.plan.options.items():
             env[f"OPT_{option_id.upper()}"] = value
         for key, value in self.variables.items():
-            env[f"RT_VAR_{key.upper()}"] = value
+            if valid_var_key(key):  # defesa: o IPC já filtra
+                env[f"RT_VAR_{key.upper()}"] = value
         return env
 
     def _step_cwd(self, env: dict[str, str]) -> str:

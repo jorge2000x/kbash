@@ -257,12 +257,21 @@ class OptionModel(QAbstractListModel):
         self._errors: dict[str, str] = {}
         #: seleção efetiva de steps: decide as opções ligadas a step (`needs_step`)
         self._selected: set[str] = set()
+        #: visibilidade atual por linha; calculada uma vez por mudança, não a cada
+        #: leitura do QML (cada linha de step lê o papel `Visible`)
+        self._visible: list[bool] = []
 
     def roleNames(self) -> dict[int, QByteArray]:  # noqa: N802
         return {role: QByteArray(name) for role, name in self._NAMES.items()}
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
         return 0 if parent.isValid() or self._script is None else len(self._script.options)
+
+    def general_count(self) -> int:
+        """Opções gerais, sem `needs_step`: as que ficam no cartão Opções (§10.2.2)."""
+        if self._script is None:
+            return 0
+        return sum(1 for option in self._script.options if option.needs_step is None)
 
     def set_selected(self, selected: set[str]) -> None:
         """Atualiza a seleção efetiva e reavalia a visibilidade (`needs_step`)."""
@@ -314,7 +323,8 @@ class OptionModel(QAbstractListModel):
             case self.Multiple:
                 return option.multiple
             case self.Visible:
-                return option_visible(self._script, self._effective_values(), option, self._selected)
+                row = index.row()
+                return self._visible[row] if row < len(self._visible) else False
             case self.Owner:
                 return option.needs_step or ""
             case self.Url:
@@ -326,6 +336,7 @@ class OptionModel(QAbstractListModel):
         self._script = script
         self._values = dict(values)
         self._errors = {}
+        self._visible = self._compute_visibility()
         self.endResetModel()
 
     def set_value(self, option_id: str, value: str) -> None:
@@ -346,12 +357,25 @@ class OptionModel(QAbstractListModel):
         effective.update(self._values)
         return effective
 
+    def _compute_visibility(self) -> list[bool]:
+        """`show_if` e `needs_step` de todas as linhas, com um só cálculo (§4.3)."""
+        if self._script is None:
+            return []
+        effective = self._effective_values()
+        return [
+            option_visible(self._script, effective, option, self._selected)
+            for option in self._script.options
+        ]
+
     def _refresh_visibility(self) -> None:
-        """Reavalia `show_if` de todas as linhas (§4.3)."""
+        """Reavalia a visibilidade e avisa só as linhas que mudaram de estado."""
         if self._script is None:
             return
-        for row, option in enumerate(self._script.options):
-            self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [self.Visible])
+        previous = self._visible
+        self._visible = self._compute_visibility()
+        for row, visible in enumerate(self._visible):
+            if row >= len(previous) or previous[row] != visible:
+                self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [self.Visible])
 
     def values(self) -> dict[str, str]:
         return dict(self._values)

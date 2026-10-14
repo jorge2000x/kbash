@@ -12,8 +12,10 @@ não repassa descritores extras (§8.1).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -35,6 +37,14 @@ __all__ = [
     "STATUS_OK",
     "STATUS_CANCEL",
 ]
+
+#: Chave de variável aceita por rt_set: vira RT_VAR_<CHAVE> no ambiente (§7.2).
+VAR_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def valid_var_key(key: str) -> bool:
+    return VAR_KEY_RE.fullmatch(key) is not None
+
 
 PROMPT_KINDS = ("confirm", "input", "choice", "number", "date", "time", "file", "text", "textbox")
 STATUS_OK = "ok"
@@ -159,7 +169,9 @@ class IpcChannel:
         ou alterar o alvo. Nomes únicos por execução evitam que duas execuções
         simultâneas do mesmo script apaguem os FIFOs uma da outra.
         """
-        base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")
+        # /tmp só sem XDG_RUNTIME_DIR: o mkdir sem exist_ok falha em qualquer
+        # caminho já existente (inclusive symlink plantado), então não há reuso
+        base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")  # noqa: S108
         base.mkdir(parents=True, exist_ok=True)
         ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
         try:
@@ -182,19 +194,13 @@ class IpcChannel:
             item.done.set()
         self._reader.join(timeout=2.0)
         for fd in (self._out_fd, self._in_fd):
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
         for path in (self.out_path, self.in_path):
-            try:
+            with contextlib.suppress(OSError):
                 path.unlink()
-            except OSError:
-                pass
-        try:
+        with contextlib.suppress(OSError):
             self._directory.rmdir()
-        except OSError:
-            pass
 
     def __enter__(self) -> "IpcChannel":
         return self
@@ -289,10 +295,8 @@ class IpcChannel:
             if request_id and str(message.get("t", "")) in PROMPT_KINDS:
                 with self._lock:
                     self._pending.pop(request_id, None)
-                try:
+                with contextlib.suppress(IpcError):
                     self._write(request_id, STATUS_CANCEL, "")
-                except IpcError:
-                    pass
 
     def _dispatch_message(self, message: dict[str, Any]) -> None:
         kind = str(message.get("t", ""))
@@ -326,7 +330,17 @@ class IpcChannel:
             self._emit(LogLine(self.step_id or None, "kbash", text, "error"))
             self._emit(Notify(text, "error"))
         elif kind == "set":
-            self.variables[str(message.get("key", ""))] = str(message.get("value", ""))
+            key = str(message.get("key", ""))
+            if not valid_var_key(key):
+                # chave com espaço ou `=` não vira variável de ambiente (ValueError no Popen)
+                self._emit(LogLine(self.step_id or None, "kbash",
+                                   f"rt_set ignorado: chave inválida {key!r}", "warn"))
+                return
+            # rt_get é case-insensitive (usa ^^): `lower` e `LOWER` são a mesma
+            # variável; a última escrita vence e a chave guardada é a dela
+            for existing in [k for k in self.variables if k.upper() == key.upper()]:
+                del self.variables[existing]
+            self.variables[key] = str(message.get("value", ""))
         elif kind in PROMPT_KINDS:
             self._dispatch(kind, message)
         elif str(message.get("id", "")):

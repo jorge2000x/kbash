@@ -475,9 +475,12 @@ rt_set() {
 
 # rt_fail "mensagem" → registra o motivo e sai com 1
 rt_fail() {
-    local text
-    text=$(rt__truncate "$*")
-    rt__send "{\"t\":\"fail\",\"text\":\"${text}\"}" || printf '%s\n' "$*" >&2
+    local text msg
+    msg="$*"
+    # sem mensagem, o motivo ainda aparece na tela (não uma linha vazia)
+    [ -n "$msg" ] || msg="falha no step ${RT_STEP_ID:-desconhecido}"
+    text=$(rt__truncate "$msg")
+    rt__send "{\"t\":\"fail\",\"text\":\"${text}\"}" || printf '%s\n' "$msg" >&2
     exit 1
 }
 
