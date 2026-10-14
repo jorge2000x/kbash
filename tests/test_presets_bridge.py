@@ -101,3 +101,72 @@ def test_corrupt_file_is_reported_and_app_keeps_working(app, tmp_path: Path, hom
     # salvar recusa: não apaga o que o usuário escreveu no arquivo
     assert bridge.savePreset("Novo") is False
     assert (home / "kbash-config" / "backup.json").read_text(encoding="utf-8") == "{quebrado"
+
+
+CHOICE_SCRIPT = (
+    "#!/usr/bin/env bash\n#@runtime 1\n#@name Escolha\n#@id escolha\n"
+    '#@option perfil type=choice label="Perfil" choices="rapido,completo" default=rapido\n'
+    "#@step a\na() { :; }\n"
+)
+
+
+def test_unknown_option_ids_in_the_file_are_ignored_on_load(app, tmp_path: Path, home: Path) -> None:
+    bridge = _bridge(tmp_path, app)
+    (home / "kbash-config").mkdir()
+    (home / "kbash-config" / "backup.json").write_text(
+        json.dumps({"Estranha": {"pasta": "/ok", "nao_existe": "x"}}), encoding="utf-8")
+    bridge._reload_presets()
+    assert bridge.loadPreset("Estranha") is True
+    assert "nao_existe" not in bridge._options_model.values()
+    assert bridge._options_model.values()["pasta"] == "/ok"
+
+
+def test_invalid_choice_from_a_preset_is_reported_as_an_option_error(app, tmp_path: Path, home: Path) -> None:
+    script = tmp_path / "escolha.kbash"
+    script.write_text(CHOICE_SCRIPT, encoding="utf-8")
+    bridge = load_bridge(script)
+    (home / "kbash-config").mkdir()
+    (home / "kbash-config" / "escolha.json").write_text(
+        json.dumps({"Antiga": {"perfil": "removido-da-versao-nova"}}), encoding="utf-8")
+    bridge._reload_presets()
+    bridge.loadPreset("Antiga")
+    assert bridge._options_model.error("perfil") != ""
+
+
+def test_unicode_name_and_spaced_script_id_round_trip(app, tmp_path: Path, home: Path) -> None:
+    script = tmp_path / "x.kbash"
+    script.write_text(SCRIPT.replace("#@id backup", "#@id meu backup"), encoding="utf-8")
+    bridge = load_bridge(script)
+    bridge.setOption("pasta", "/pão/açúcar")
+    assert bridge.savePreset("Família — casa ✓") is True
+    assert list(bridge.property("presetNames")) == ["Família — casa ✓"]
+    bridge.setOption("pasta", "/outra")
+    assert bridge.loadPreset("Família — casa ✓") is True
+    assert bridge._options_model.values()["pasta"] == "/pão/açúcar"
+
+
+def test_saving_the_same_name_overwrites_it(app, tmp_path: Path, home: Path) -> None:
+    bridge = _bridge(tmp_path, app)
+    bridge.setOption("pasta", "/um")
+    bridge.savePreset("Casa")
+    bridge.setOption("pasta", "/dois")
+    bridge.savePreset("Casa")
+    assert list(bridge.property("presetNames")) == ["Casa"]
+    bridge.setOption("pasta", "/x")
+    bridge.loadPreset("Casa")
+    assert bridge._options_model.values()["pasta"] == "/dois"
+
+
+def test_unwritable_config_folder_reports_error_and_keeps_state(app, tmp_path: Path, home: Path) -> None:
+    (home / "kbash-config").write_text("sou um arquivo, não uma pasta", encoding="utf-8")
+    bridge = _bridge(tmp_path, app)
+    assert bridge.savePreset("Casa") is False
+    assert list(bridge.property("presetNames")) == []
+
+
+def test_preset_file_is_valid_json_with_only_text_values(app, tmp_path: Path, home: Path) -> None:
+    bridge = _bridge(tmp_path, app)
+    bridge.setOption("senha", "nao-grava")
+    bridge.savePreset("Teste")
+    data = json.loads((home / "kbash-config" / "backup.json").read_text(encoding="utf-8"))
+    assert all(isinstance(v, str) for values in data.values() for v in values.values())
