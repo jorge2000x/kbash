@@ -78,3 +78,26 @@ def test_general_count_excludes_step_options(app, tmp_path: Path) -> None:
     model.load(script2, default_options(script2))
     assert model.general_count() == 0
     assert model.rowCount() == 1
+
+
+def test_visibility_signals_only_rows_that_change(app, tmp_path: Path) -> None:
+    """Regressão de desempenho: cada digitação emitia `Visible` para todas as
+    opções e cada linha de step relia isso pelo Python."""
+    path = tmp_path / "v.kbash"
+    path.write_text(SCRIPT, encoding="utf-8")
+    script = parse_script(path)
+    model = OptionModel()
+    model.load(script, default_options(script))
+
+    emitted: list[tuple[int, list[int]]] = []
+
+    def record(top, _bottom, roles) -> None:
+        if OptionModel.Visible in roles:
+            emitted.append((top.row(), list(roles)))
+
+    model.dataChanged.connect(record)
+    model.set_value("geral", "outro")  # não muda visibilidade de ninguém
+    assert emitted == []
+
+    model.set_selected({"zram_passo"})  # só `compressao` (linha 1) muda
+    assert emitted == [(1, [OptionModel.Visible])]
