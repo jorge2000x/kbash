@@ -44,6 +44,7 @@ from ..core.planner import (
     set_checked,
 )
 from ..core.ui import Prompt
+from .library import list_library
 from .models import LogModel, OptionModel, SelectedStepsProxy, StepListModel
 from .ui_qt import QtUi
 
@@ -117,6 +118,8 @@ class Bridge(QObject):
         self._script = script
         self._assets = assets
         self._page = PAGE_WELCOME
+        self._library: list[dict[str, Any]] = []
+        self.refreshLibrary()
         self._running = False
         self._executor: Executor | None = None
         self._thread: threading.Thread | None = None
@@ -221,7 +224,11 @@ class Bridge(QObject):
 
     #: `False` na tela inicial (sem script escolhido ainda)
     hasScriptChanged = Signal()
+    libraryChanged = Signal()
     hasScript = Property(bool, lambda self: self._has_script(), notify=hasScriptChanged)
+
+    # biblioteca da tela inicial (gui/library.py): dicts com path, name, description, valid
+    libraryEntries = Property("QVariantList", lambda self: self._library, notify=libraryChanged)
 
     scriptNameChanged = Signal()
     scriptName = Property(str, lambda self: self._script.name, notify=scriptNameChanged)
@@ -353,6 +360,16 @@ class Bridge(QObject):
 
             return Path(QUrl(location).toLocalFile())
         return Path(location)
+
+    @Slot()
+    def refreshLibrary(self) -> None:  # noqa: N802
+        """Relê a pasta do programa (gui/library.py)."""
+        self._library = [
+            {"path": str(entry.path), "name": entry.name,
+             "description": entry.description, "valid": entry.valid}
+            for entry in list_library()
+        ]
+        self.libraryChanged.emit()
 
     @Slot(str, result=bool)
     def loadScript(self, location: str) -> bool:  # noqa: N802
