@@ -44,7 +44,7 @@ from ..core.planner import (
     set_checked,
 )
 from ..core.ui import Prompt
-from .library import list_library
+from .library import list_library, resolve_icon
 from .models import LogModel, OptionModel, SelectedStepsProxy, StepListModel
 from .ui_qt import QtUi
 
@@ -366,7 +366,8 @@ class Bridge(QObject):
         """Relê a pasta do programa (gui/library.py)."""
         self._library = [
             {"path": str(entry.path), "name": entry.name,
-             "description": entry.description, "valid": entry.valid}
+             "description": entry.description, "valid": entry.valid,
+             "icon": entry.icon, "iconFile": entry.icon_file}
             for entry in list_library()
         ]
         self.libraryChanged.emit()
@@ -419,21 +420,12 @@ class Bridge(QObject):
 
     # -- ícone (§4.2) ----------------------------------------------------
     def _icon_name(self) -> str:
-        """Nome de ícone do tema; ``#@icon`` pode ser um caminho em assets/."""
-        icon = self._script.icon or ""
-        if icon and "/" in icon:
-            return "application-x-executable"  # é um arquivo: usa scriptIconFile
-        return icon or "application-x-executable"
+        """Nome de ícone do tema; ``#@icon`` que é arquivo vem em `_icon_file` (gui/library.py)."""
+        return resolve_icon(self._script.icon, self._script.path, self._assets)[0] or "application-x-executable"
 
     def _icon_file(self) -> str:
-        """Caminho do ícone quando ``#@icon`` aponta para um arquivo do payload."""
-        icon = self._script.icon or ""
-        if not icon or "/" not in icon:
-            return ""
-        candidate = Path(icon)
-        if not candidate.is_absolute():
-            candidate = (self._assets or self._script.path.parent / "assets") / candidate
-        return str(candidate) if candidate.is_file() else ""
+        """Caminho do ícone quando ``#@icon`` aponta para um arquivo em ``assets/``."""
+        return resolve_icon(self._script.icon, self._script.path, self._assets)[1]
 
     @Slot(str, bool, result=bool)
     def setStepChecked(self, step_id: str, checked: bool) -> bool:  # noqa: N802
