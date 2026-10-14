@@ -189,7 +189,7 @@ install_deps() {
 | `#@required` | Step obrigatório: sempre selecionado, não pode ser desmarcado. |
 | `#@depends id1,id2` | Dependências. Marcar este step marca as dependências automaticamente. |
 | `#@root true` | Step exige privilégios de root (ver §9.2). |
-| `#@timeout N` | Timeout em segundos (padrão: sem limite). |
+| `#@timeout N` | Timeout em segundos (padrão: sem limite). `0` ou negativo gera aviso e vale como sem limite. |
 | `#@on_error stop\|continue` | O que fazer se este step falhar. Padrão `stop`. |
 
 ### 4.5 Regras sobre código de nível superior
@@ -344,7 +344,7 @@ bash --noprofile --norc -c '
 | `RT_MODE` | Sempre `step`. |
 | `RT_WORKDIR` | Diretório temporário da execução, removido ao final (ou o cwd, se não houver). |
 | `OPT_<ID>` | Valores das opções **com valor** (§4.3). |
-| `RT_VAR_<KEY>` | Variáveis definidas por steps anteriores via `rt_set`. |
+| `RT_VAR_<KEY>` | Variáveis definidas por steps anteriores via `rt_set`. A chave deve casar com `[A-Za-z_][A-Za-z0-9_]*`; outras são ignoradas com aviso. Chaves que diferem só por caixa são a mesma variável (a última escrita vence), como em `rt_get`. |
 
 ### 7.3 Eventos emitidos (`core/events.py`)
 
@@ -506,8 +506,10 @@ Regras:
 
 ### 9.2 Elevação de privilégio
 - **Ligada** (`PRIVILEGE_ELEVATION = True` em `core/executor.py`). Steps `#@root true`
-  rodam com `pkexec env -i <vars> bash ...`, repassando só as variáveis `RT_*`/`OPT_*`
-  e as de ambiente listadas em `ROOT_PASSTHROUGH`.
+  rodam com `pkexec /usr/bin/env -i <vars> bash ...`, repassando só as variáveis `RT_*`/`OPT_*`
+  e as de ambiente listadas em `ROOT_PASSTHROUGH`. `PATH` e `HOME` do root são fixos
+  (`ROOT_PATH` só com diretórios do sistema; `HOME=/root`): o `PATH` do usuário nunca
+  chega ao root, para que um binário em `~/bin` não rode como root.
 - **Autorização:** a GUI mostra o plano (com os steps que pedem root) e só depois o
   usuário confirma a execução. Então o `Executor.run` pede autorização uma vez com
   `pkexec true`, que mostra o diálogo do sistema (polkit), **antes do primeiro step**.
