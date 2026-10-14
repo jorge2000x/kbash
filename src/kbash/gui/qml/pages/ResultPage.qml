@@ -33,6 +33,9 @@ AppPage {
 
         ListView {
             id: resultSteps
+            // reaproveita as linhas ao rolar (cache de delegates) em vez de recriar StepRow
+            reuseItems: true
+            cacheBuffer: 400
             Layout.fillWidth: true
             // mesma regra da Seleção: acompanha o conteúdo até 400
             Layout.preferredHeight: Math.min(contentHeight, 400)

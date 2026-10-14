@@ -65,6 +65,9 @@ AppPage {
 
         ListView {
             id: stepsView
+            // reaproveita as linhas ao rolar (cache de delegates) em vez de recriar StepRow
+            reuseItems: true
+            cacheBuffer: 400
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(contentHeight, 400)
             Layout.minimumHeight: 60
