@@ -656,3 +656,18 @@ def test_popen_value_error_fails_only_that_step(tmp_path: Path, monkeypatch) -> 
     result = make(parse_script(target)).run(collector)
     assert result.status is RunState.FAILED
     assert any("não foi possível iniciar" in getattr(e, "text", "") for e in collector.events)
+
+
+def test_rt_fail_without_message_still_reports_the_step(tmp_path: Path) -> None:
+    target = tmp_path / "failempty.sh"
+    target.write_text(
+        "#!/usr/bin/env bash\n#@runtime 1\n#@name FailEmpty\n"
+        "#@step vazio\nvazio() { rt_fail; }\n",
+        encoding="utf-8",
+    )
+    collector = Collector()
+    result = make(parse_script(target), ipc_factory=IpcChannel).run(collector)
+    assert result.status is RunState.FAILED
+    assert any(
+        getattr(e, "text", "") == "falha no step vazio" for e in collector.events
+    )
