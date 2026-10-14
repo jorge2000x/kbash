@@ -59,7 +59,7 @@ STEP_ATTRS = frozenset(
 OPTION_ATTRS = frozenset(
     {"type", "label", "default", "choices", "required", "help",
      "min", "max", "step", "filters", "pattern", "minlen", "maxlen", "multiple",
-     "show_if", "url"}
+     "show_if", "url", "needs_step"}
 )
 HEADER_ATTRS = frozenset(
     {"runtime", "name", "id", "description", "version", "author", "icon", "requires", "strict"}
@@ -375,6 +375,7 @@ class _Parser:
         steps = self._build_steps()
         self._check_cycles(steps)
         self._check_show_if(options)
+        self._check_needs_step(options, steps)
         script = Script(
             path=path,
             sha256=sha256,
@@ -474,6 +475,7 @@ class _Parser:
                 help=help_text,
                 url=url,
                 show_if=self._parse_show_if(block),
+                needs_step=self._parse_needs_step(block),
                 line=block.line,
             )
         if kind in ("choice", "multi"):
@@ -541,8 +543,32 @@ class _Parser:
             maxlen=maxlen,
             multiple=multiple,
             show_if=show_if,
+            needs_step=self._parse_needs_step(block),
             line=block.line,
         )
+
+    def _parse_needs_step(self, block: _Block) -> str | None:
+        """``needs_step=<id>``: id do step a que a opção pertence (ou ``None``)."""
+        raw = block.get("needs_step")
+        if raw is None or not raw.strip():
+            return None
+        return raw.strip()
+
+    def _check_needs_step(self, options: list[Option], steps: list[Step]) -> None:
+        """Ligação opção → step: o step precisa existir."""
+        step_ids = {step.id for step in steps}
+        lines = {
+            block.id: block.attr_line("needs_step")
+            for block in self.blocks
+            if block.kind == "option" and block.get("needs_step")
+        }
+        for option in options:
+            if option.needs_step is not None and option.needs_step not in step_ids:
+                self._error(
+                    f"needs_step de #@option {option.id!r} aponta para step inexistente "
+                    f"{option.needs_step!r}",
+                    lines.get(option.id, option.line),
+                )
 
     def _check_display_option(self, block: _Block, kind: str) -> str:
         """§4.3: valida ``paragraph`` (precisa de ``label``) e ``link`` (precisa de

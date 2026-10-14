@@ -163,7 +163,12 @@ def precheck(
         if shutil.which(command) is None:
             problems.append(f"comando obrigatório ausente no PATH: {command}")
     values = options if options is not None else (plan.options if plan else {})
-    for option_id, message in option_errors(script, values).items():
+    # opções ligadas a step só valem para os steps realmente selecionados
+    if steps is None:
+        option_selection: set[str] = set(plan.selected) if plan else set()
+    else:
+        option_selection = {step.id for step in steps}
+    for option_id, message in option_errors(script, values, option_selection).items():
         option = script.option(option_id)
         label = option.label if option else option_id
         problems.append(f"opção {label!r}: {message}")

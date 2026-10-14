@@ -224,6 +224,8 @@ class OptionModel(QAbstractListModel):
     Multiple = _role("multiple", 17)
     Visible = _role("visible", 18)
     Url = _role("url", 19)
+    #: `needs_step` (SPEC §4.3): id do step dono, ou "" para opção geral.
+    Owner = _role("owner", 20)
 
     _NAMES = {
         OptId: b"optId",
@@ -245,6 +247,7 @@ class OptionModel(QAbstractListModel):
         Multiple: b"multiple",
         Visible: b"visible",
         Url: b"url",
+        Owner: b"owner",
     }
 
     def __init__(self, parent: Any = None) -> None:
@@ -252,12 +255,21 @@ class OptionModel(QAbstractListModel):
         self._script: Script | None = None
         self._values: dict[str, str] = {}
         self._errors: dict[str, str] = {}
+        #: seleção efetiva de steps: decide as opções ligadas a step (`needs_step`)
+        self._selected: set[str] = set()
 
     def roleNames(self) -> dict[int, QByteArray]:  # noqa: N802
         return {role: QByteArray(name) for role, name in self._NAMES.items()}
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
         return 0 if parent.isValid() or self._script is None else len(self._script.options)
+
+    def set_selected(self, selected: set[str]) -> None:
+        """Atualiza a seleção efetiva e reavalia a visibilidade (`needs_step`)."""
+        if selected == self._selected:
+            return
+        self._selected = set(selected)
+        self._refresh_visibility()
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid() or self._script is None:
@@ -302,7 +314,9 @@ class OptionModel(QAbstractListModel):
             case self.Multiple:
                 return option.multiple
             case self.Visible:
-                return option_visible(self._script, self._effective_values(), option)
+                return option_visible(self._script, self._effective_values(), option, self._selected)
+            case self.Owner:
+                return option.needs_step or ""
             case self.Url:
                 return option.url
         return None

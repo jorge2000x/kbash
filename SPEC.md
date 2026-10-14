@@ -152,10 +152,13 @@ O repositório também guarda as ferramentas de empacotamento (`tools/`, ao lado
 | `minlen` / `maxlen` | Comprimento mínimo/máximo (`string`/`password`/`text`). |
 | `multiple` | `true` permite vários arquivos (`file`); vira lista separada por vírgula. |
 | `show_if` | Condição de visibilidade: `"outra=valor[,outra2=valor2]"` (AND). Opção oculta some do formulário, usa o `default` e pula o `required`. Vale também para `paragraph` e `link`. |
+| `needs_step` | `needs_step=<id>`: a opção pertence ao step `<id>`. Ela aparece **dentro da linha desse step** na tela de Seleção, e só enquanto o step está selecionado (contando as dependências adicionadas automaticamente). Oculta, usa o `default` e pula o `required`. Combina com `show_if` (AND). Id inexistente é erro de validação (§4.6). Opção sem `needs_step` é geral e fica no cartão *Opções*. |
 | `required` | `true` bloqueia "Executar" enquanto vazio. |
 | `help` | Texto de ajuda (tooltip/subtítulo). |
 
-Cada opção **com valor** vira variável de ambiente `OPT_<ID em maiúsculas>` em todos os steps. `bool` vira `1`/`0`; `multi` vira valores separados por vírgula; `number`/`slider` vão como texto numérico; `date` vai em ISO (`AAAA-MM-DD`), `time` em `HH:MM` (24h); `file` expande `~`/`$HOME` como `path` (com `multiple`, vários caminhos separados por vírgula); `text` pode conter quebras de linha. Referência inexistente, auto-referência ou ciclo em `show_if` é erro de validação (§4.6).
+Cada opção **com valor** vira variável de ambiente `OPT_<ID em maiúsculas>` em todos os steps. `bool` vira `1`/`0`; `multi` vira valores separados por vírgula; `number`/`slider` vão como texto numérico; `date` vai em ISO (`AAAA-MM-DD`), `time` em `HH:MM` (24h); `file` expande `~`/`$HOME` como `path` (com `multiple`, vários caminhos separados por vírgula); `text` pode conter quebras de linha. Referência inexistente, auto-referência ou ciclo em `show_if` é erro de validação (§4.6); o mesmo vale para `needs_step` apontando para um step inexistente.
+
+**Convenção de escrita:** opções que configuram um step devem usar `needs_step`, e opções que só servem para ligar ou desligar uma ação não devem existir: o checkbox do step já faz isso. Assim, quem usa vê a escolha no mesmo lugar em que decide a ação.
 
 **`paragraph` e `link` não têm valor.** Não geram `OPT_*`, não entram no plano, não aceitam `--opt` (erro, §6), não são obrigatórios e não têm `default`. Servem para orientar o usuário: `paragraph` mostra o texto; `link` mostra um botão que abre a `url`. O `link` só abre `http`/`https` (também revalidado no runtime, `Bridge.openLink`).
 
@@ -302,7 +305,8 @@ Estados de um step: `pending → running → success | failed | cancelled | skip
 - `resolve(script, selected_ids) -> Resolution(ids, auto_added)`: adiciona dependências (transitivas) e steps `required`, ordena topologicamente mantendo a ordem de declaração como desempate. `auto_added` diz à GUI o que entrou "por dependência".
 - `dependents(script, step_id)` e `can_uncheck` / `set_checked`: desmarcar um step de que outro selecionado depende é bloqueado na GUI.
 - `value_options(script)`: as opções com valor. É a única lista usada para valores, erros e o `RunPlan.options`.
-- `option_errors` / `validate_options`: `required` preenchidas, `choice`/`multi` dentro de `choices`, número na faixa, data/hora válidas, `pattern`/`minlen`/`maxlen`. Opção oculta por `show_if` não é validada.
+- `option_visible(script, values, option, selected)`: a opção aparece se `needs_step` está em `selected` (seleção efetiva, com dependências) **e** o `show_if` vale. Sem `selected`, uma opção com `needs_step` fica oculta.
+- `option_errors` / `validate_options`: `required` preenchidas, `choice`/`multi` dentro de `choices`, número na faixa, data/hora válidas, `pattern`/`minlen`/`maxlen`. Opção oculta (por `show_if` ou `needs_step`) não é validada e volta ao `default`. A pré-checagem (§7.5) usa a mesma seleção.
 - `build_plan(script, selected, options)`: `--opt` com chave desconhecida ou com chave de `paragraph`/`link` é erro.
 
 ---
@@ -645,7 +649,7 @@ runtime genérico, que abre sempre na home.
 
 1. **Boas-vindas** — ícone, nome, descrição, versão, autor; botão *Começar*. Sem
    script (home, §10.0), a mesma tela mostra a zona de arrastar e o seletor do portal.
-2. **Seleção** — formulário das opções (widget por `type`) e lista de steps agrupados, com checkbox, título, descrição e selos ("requer root", "por dependência", "obrigatório"). `paragraph` aparece como texto e `link` como botão, sem linha `OPT_*`. Botão *Executar* desabilitado até opções obrigatórias válidas.
+2. **Seleção** — cartão *Opções* com as opções gerais (sem `needs_step`), e lista de steps agrupados, com checkbox, título, descrição e selos ("requer root", "por dependência", "obrigatório"). Cada linha de step mostra **abaixo dele** as opções com `needs_step` igual ao seu id, enquanto o step estiver marcado; ao desmarcar, elas somem. Widget por `type` em todos os lugares. `paragraph` aparece como texto e `link` como botão, sem linha `OPT_*`. Botão *Executar* desabilitado até opções visíveis e obrigatórias válidas. A troca de seleção reavalia a visibilidade na hora.
 3. **Execução** — lista de steps com ícone de estado e duração; barra de progresso geral e do step; painel de log monoespaçado (stderr destacado, auto-scroll pausável, copiar); botão *Cancelar*. Prompts aparecem em diálogo modal.
 4. **Resultado** — sucesso/falha/cancelado, resumo por step, *Ver log*, *Salvar log*, *Fechar* (e *Tentar novamente* os que falharam).
 

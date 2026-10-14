@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from .errors import ValidationError
@@ -193,11 +194,13 @@ def default_options(script: Script, home: str | None = None) -> dict[str, str]:
     return values
 
 
-def option_errors(script: Script, values: dict[str, str]) -> dict[str, str]:
+def option_errors(
+    script: Script, values: dict[str, str], selected: Collection[str] | None = None
+) -> dict[str, str]:
     """§6 — mapa ``option_id -> mensagem de erro`` (vazio se tudo válido)."""
     errors: dict[str, str] = {}
     for option in value_options(script):
-        if not option_visible(script, values, option):
+        if not option_visible(script, values, option, selected):
             continue
         raw = values.get(option.id, "")
         value = raw.strip() if isinstance(raw, str) else raw
@@ -244,11 +247,23 @@ def option_errors(script: Script, values: dict[str, str]) -> dict[str, str]:
     return errors
 
 
-def option_visible(script: Script, values: dict[str, str], option: Option) -> bool:
-    """§4.3: `show_if` satisfeito? Compara valores normalizados (`bool` → `1`/`0`).
+def option_visible(
+    script: Script,
+    values: dict[str, str],
+    option: Option,
+    selected: Collection[str] | None = None,
+) -> bool:
+    """§4.3: a opção aparece? Vale `needs_step` e `show_if`.
+
+    - ``needs_step``: o step dono precisa estar em ``selected`` (seleção efetiva).
+      Sem ``selected`` (``None``) a opção ligada a step fica oculta.
+    - ``show_if``: compara valores normalizados (`bool` → `1`/`0`).
 
     ``values`` pode não ter todas as chaves: o que falta usa o `default`.
     """
+    if option.needs_step is not None:
+        if selected is None or option.needs_step not in selected:
+            return False
     for ref_id, expected in option.show_if:
         ref = script.option(ref_id)
         if ref is None:
@@ -259,13 +274,23 @@ def option_visible(script: Script, values: dict[str, str], option: Option) -> bo
     return True
 
 
-def validate_options(script: Script, values: dict[str, str], home: str | None = None) -> dict[str, str]:
-    """Valida e normaliza opções; levanta :class:`ValidationError` em caso de erro."""
+def validate_options(
+    script: Script,
+    values: dict[str, str],
+    home: str | None = None,
+    selected: Collection[str] | None = None,
+) -> dict[str, str]:
+    """Valida e normaliza opções; levanta :class:`ValidationError` em caso de erro.
+
+    Opção oculta (por ``show_if`` ou ``needs_step``) volta ao ``default``.
+    """
     values = dict(values)
     for option in value_options(script):
-        if option.show_if and not option_visible(script, values, option):
+        if (option.show_if or option.needs_step is not None) and not option_visible(
+            script, values, option, selected
+        ):
             values[option.id] = option.default or ""
-    errors = option_errors(script, values)
+    errors = option_errors(script, values, selected)
     if errors:
         raise ValidationError("; ".join(f"{key}: {msg}" for key, msg in errors.items()), script.path, None)
     return {option.id: expand_value(values.get(option.id, ""), home) if option.type in ("path", "file")
@@ -291,7 +316,7 @@ def build_plan(
                     f"{key!r} é só texto/link ({option.type}) e não recebe valor", script.path, None
                 )
             values[key] = value
-    normalized = validate_options(script, values, home)
+    normalized = validate_options(script, values, home, resolution.ids)
     return RunPlan(
         script=script,
         selected=resolution.ids,

@@ -20,10 +20,11 @@ AppPage {
             ? qsTr("Preencha antes de executar.")
             : qsTr("Este script não pede opções.")
 
+        // só as opções gerais; as ligadas a um step ficam dentro da linha do step
         Repeater {
             model: bridge.options
             delegate: OptionField {
-                visible: model.visible
+                visible: model.visible && model.owner === ""
                 optId: model.optId
                 type: model.type
                 label: model.label
