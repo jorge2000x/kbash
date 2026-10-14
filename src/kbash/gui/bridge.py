@@ -303,6 +303,10 @@ class Bridge(QObject):
 
     optionCountChanged = Signal()
     optionCount = Property(int, lambda self: self._options_model.rowCount(), notify=optionCountChanged)
+    # opções gerais (sem needs_step): o cartão Opções da seleção usa esta contagem
+    generalOptionCount = Property(
+        int, lambda self: self._options_model.general_count(), notify=optionCountChanged
+    )
 
     # Modelos expostos ao QML. Precisam ser Property: atributos Python puros
     # são invisíveis para o QML (a view lia 0 linhas). Como o objeto nunca é

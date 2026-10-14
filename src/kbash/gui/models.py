@@ -264,6 +264,12 @@ class OptionModel(QAbstractListModel):
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
         return 0 if parent.isValid() or self._script is None else len(self._script.options)
 
+    def general_count(self) -> int:
+        """Opções gerais, sem `needs_step`: as que ficam no cartão Opções (§10.2.2)."""
+        if self._script is None:
+            return 0
+        return sum(1 for option in self._script.options if option.needs_step is None)
+
     def set_selected(self, selected: set[str]) -> None:
         """Atualiza a seleção efetiva e reavalia a visibilidade (`needs_step`)."""
         if selected == self._selected:
