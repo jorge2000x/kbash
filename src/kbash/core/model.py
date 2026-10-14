@@ -166,6 +166,9 @@ class Option:
     #: §4.3: visibilidade condicional (`show_if="outra=valor,..."`;
     #: AND entre pares). Tuplas `(option_id, valor)` já fatiadas.
     show_if: tuple[tuple[str, str], ...] = ()
+    #: Opção ligada a um step (``needs_step=<id>``): só aparece e vale quando o
+    #: step está selecionado (efetivamente, depois das dependências).
+    needs_step: str | None = None
     line: int = 0
 
     @property

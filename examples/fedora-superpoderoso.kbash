@@ -25,13 +25,14 @@
 #@requires dnf,flatpak,systemctl
 
 # ---------------------------------------------------------------------------
-# Opções: valores escolhidos no formulário.
+# Opções ligadas aos steps: cada uma aparece junto do step que configura,
+# quando ele é selecionado (needs_step). Opção sem needs_step seria geral.
 # ---------------------------------------------------------------------------
-#@option gpu type=choice label="Placa de vídeo" choices="nenhuma,nvidia,amd,intel-nova,intel-antiga" default=nenhuma help="Usada pelo passo 'Drivers de vídeo'."
-#@option nvidia_secure_boot_off type=bool label="Confirmo que o Secure Boot está desligado" default=false help="Obrigatório para instalar o driver NVIDIA. Com Secure Boot ligado, siga o guia do RPM Fusion."
-#@option zram_tamanho type=choice label="Tamanho do zram" choices="ram,ram / 2" default=ram help="ram para 8 GB de RAM; ram / 2 para 16 GB ou mais. Usado pelo passo 'Configurar zram'."
-#@option zram_compressao type=choice label="Compressão do zram" choices="lz4,zstd" default=lz4 help="lz4 é mais rápido e o padrão do guia; zstd comprime melhor. Usado pelo passo 'Configurar zram'."
-#@option scx_sched type=choice label="Escalonador eBPF" choices="scx_lavd,scx_bpfland,scx_rusty,scx_cosmos" default=scx_lavd help="Usado pelo passo 'Scheduler eBPF'. lavd é o do guia; bpfland é uma alternativa mais leve para desktop."
+#@option gpu type=choice label="Placa de vídeo" choices="nenhuma,nvidia,amd,intel-nova,intel-antiga" default=nenhuma needs_step=drivers_gpu
+#@option nvidia_secure_boot_off type=bool label="Confirmo que o Secure Boot está desligado" default=false needs_step=drivers_gpu show_if="gpu=nvidia" help="Obrigatório para instalar o driver NVIDIA. Com Secure Boot ligado, siga o guia do RPM Fusion."
+#@option zram_tamanho type=choice label="Tamanho do zram" choices="ram,ram / 2" default=ram needs_step=zram_passo help="ram para 8 GB de RAM; ram / 2 para 16 GB ou mais."
+#@option zram_compressao type=choice label="Compressão do zram" choices="lz4,zstd" default=lz4 needs_step=zram_passo help="lz4 é mais rápido e o padrão do guia; zstd comprime melhor."
+#@option scx_sched type=choice label="Escalonador eBPF" choices="scx_lavd,scx_bpfland,scx_rusty,scx_cosmos" default=scx_lavd needs_step=scheduler_ebpf_passo help="lavd é o do guia; bpfland é uma alternativa mais leve para desktop."
 
 # ---------------------------------------------------------------------------
 # Funções auxiliares

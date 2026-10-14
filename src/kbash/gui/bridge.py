@@ -943,7 +943,8 @@ class Bridge(QObject):
                 self._blocked[step.id] = reason or "obrigatório"
             self._steps_model.set_checked(step.id, step.id in selected, locked=locked)
         self._steps_model.set_auto_added(resolution.auto_added)
-        self._options_model.set_errors(option_errors(self._script, self._options_model.values()))
+        self._options_model.set_selected(selected)
+        self._options_model.set_errors(option_errors(self._script, self._options_model.values(), selected))
         self._options_model.reload_errors()
         self._precheck_problems = self._prechecks()
         self.canRunChanged.emit()
@@ -956,7 +957,9 @@ class Bridge(QObject):
     def _can_run(self) -> bool:
         if self._running or not self._steps_model.checked_ids():
             return False
-        return not option_errors(self._script, self._options_model.values())
+        return not option_errors(
+            self._script, self._options_model.values(), set(self._steps_model.checked_ids())
+        )
 
     def _prechecks(self) -> list[str]:
         try:
@@ -973,7 +976,9 @@ class Bridge(QObject):
         ]
 
     def _build_plan(self) -> RunPlan:
-        errors = option_errors(self._script, self._options_model.values())
+        errors = option_errors(
+            self._script, self._options_model.values(), set(self._steps_model.checked_ids())
+        )
         self._options_model.set_errors(errors)
         self._options_model.reload_errors()
         if errors:

@@ -118,6 +118,33 @@ Rectangle {
                 Layout.fillWidth: true
             }
 
+            // opções ligadas a este step (needs_step, SPEC §4.3): aparecem junto dele
+            // quando o step está selecionado, e somem quando ele é desmarcado
+            Repeater {
+                model: bridge.options
+                delegate: OptionField {
+                    Layout.fillWidth: true
+                    visible: model.visible && model.owner === root.stepId
+                    optId: model.optId
+                    type: model.type
+                    label: model.label
+                    value: model.value
+                    choices: model.choices
+                    required: model.required
+                    error: model.error
+                    help: model.help
+                    minimum: model.minimum
+                    maximum: model.maximum
+                    step: model.step
+                    filters: model.filters
+                    url: model.url
+                    pattern: model.pattern
+                    minlen: model.minlen
+                    maxlen: model.maxlen
+                    multiple: model.multiple
+                }
+            }
+
             Flow {
                 visible: root.needsRoot || root.required || root.autoAdded
                 spacing: theme.smallSpacing
