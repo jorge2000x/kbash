@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kbash.gui.library import PROGRAM_SCRIPTS_DIR, list_library
+from kbash.gui.library import DEV_SCRIPTS_DIR, list_library, program_scripts_dir
 
 GOOD = (
     "#!/usr/bin/env bash\n#@runtime 1\n#@name Bom\n#@desc Faz algo\n"
@@ -45,7 +45,20 @@ def test_missing_folder_is_an_empty_list(tmp_path: Path) -> None:
     assert list_library(tmp_path / "nao-existe") == []
 
 
-def test_program_folder_points_to_the_repo_examples() -> None:
-    assert PROGRAM_SCRIPTS_DIR.name == "examples"
-    names = [e.path.name for e in list_library(PROGRAM_SCRIPTS_DIR)]
+def test_outside_appimage_the_program_folder_is_the_repo_examples(monkeypatch) -> None:
+    monkeypatch.delenv("APPIMAGE", raising=False)
+    assert program_scripts_dir() == DEV_SCRIPTS_DIR
+    names = [e.path.name for e in list_library()]
     assert "fedora-superpoderoso.kbash" in names
+
+
+def test_inside_appimage_the_program_folder_is_where_the_appimage_lives(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app = tmp_path / "Pasta"
+    app.mkdir()
+    (app / "kbash-x86_64.AppImage").write_text("", encoding="utf-8")
+    (app / "meu.kbash").write_text(GOOD, encoding="utf-8")
+    monkeypatch.setenv("APPIMAGE", str(app / "kbash-x86_64.AppImage"))
+    assert program_scripts_dir() == app
+    assert [e.path.name for e in list_library()] == ["meu.kbash"]

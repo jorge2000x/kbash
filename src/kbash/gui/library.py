@@ -1,11 +1,13 @@
 """Biblioteca da tela inicial: os ``.kbash`` da pasta do programa (sem Qt).
 
-A pasta do programa é ``examples/`` na raiz do projeto. Só leitura estática:
-cada arquivo passa pelo parser (``parse_script``), que não executa nada.
+Pasta do programa: a pasta onde está o ``.AppImage`` (variável ``APPIMAGE``,
+definida pelo runtime do AppImage); fora dele, ``examples/`` do projeto.
+Só leitura estática: cada arquivo passa pelo parser, que não executa nada.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,8 +17,16 @@ from ..core.parser import parse_script
 #: Extensão que a biblioteca lista. ``.sh`` continua aceito ao abrir pelo seletor.
 LIBRARY_SUFFIX = ".kbash"
 
-#: ``src/kbash/gui/library.py`` → raiz do projeto → ``examples/``.
-PROGRAM_SCRIPTS_DIR = Path(__file__).resolve().parents[3] / "examples"
+#: Fora do AppImage (desenvolvimento): ``src/kbash/gui/library.py`` → raiz → ``examples/``.
+DEV_SCRIPTS_DIR = Path(__file__).resolve().parents[3] / "examples"
+
+
+def program_scripts_dir() -> Path:
+    """Pasta de onde o programa foi executado: a do ``.AppImage``, se houver."""
+    appimage = os.environ.get("APPIMAGE", "")
+    if appimage:
+        return Path(appimage).resolve().parent
+    return DEV_SCRIPTS_DIR
 
 
 @dataclass(frozen=True)
@@ -27,12 +37,13 @@ class LibraryEntry:
     valid: bool
 
 
-def list_library(folder: Path = PROGRAM_SCRIPTS_DIR) -> list[LibraryEntry]:
+def list_library(folder: Path | None = None) -> list[LibraryEntry]:
     """Lista os ``.kbash`` de ``folder`` (não recursivo), em ordem de nome.
 
     Arquivo que não passa no parser aparece desabilitado, com aviso; nunca derruba a lista.
     Pasta inexistente vira lista vazia.
     """
+    folder = folder if folder is not None else program_scripts_dir()
     if not folder.is_dir():
         return []
     entries: list[LibraryEntry] = []
