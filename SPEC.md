@@ -519,7 +519,10 @@ Regras:
   sistema mantiver a autorização em cache, não há novo diálogo; se não, o usuário
   verá um diálogo por step (a confirmar em um Fedora real).
 - Scripts **não** devem chamar `sudo` por dentro (não há TTY): o passo `#@root true`
-  já roda como root. Documentar em `docs/PORTAR.md`.
+  já roda como root. Documentar em `docs/PORTAR.md` e `docs/AUTHORING.md`.
+- **Limitação conhecida:** `#@requires` é checado no `PATH` do usuário (pré-checagem),
+  e não no `ROOT_PATH` do root. Um comando que só existe em `~/.local/bin` passa na
+  pré-checagem e falha quando o step roda como root. Pendente.
 
 ### 9.3 Logs persistentes
 Planejado: `$XDG_STATE_HOME/<id>/logs/AAAA-MM-DD_HH-MM-SS.log`, com timestamp, step e stream por linha, mantendo os últimos 20. **Não implementado** (Fase 6). Hoje o log só existe na tela e pode ser salvo pelo usuário (*Salvar log*).
@@ -838,10 +841,14 @@ está pronta quando **todos** os critérios passam.
 ### Fase 6 — Robustez e documentação (parcial)
 - [x] Tipos `paragraph` e `link` (§4.3), com validação, testes e exemplo em `examples/all-options.sh`.
 - [x] Guia para portar um script bash existente (`docs/PORTAR.md`).
-- [ ] Elevação de privilégio: **desligada** (`PRIVILEGE_ELEVATION = False`;
-      steps `#@root` rodam como usuário comum, sem pedir senha).
+- [x] Elevação de privilégio: **ligada** (`PRIVILEGE_ELEVATION = True`, §9.2), com
+      autorização única antes do primeiro step. Pendente: validar o diálogo real do
+      polkit e o cache de autorização num Fedora; `#@requires` de steps root (§9.2).
 - [ ] Logs persistentes com rotação (§9.3).
-- [ ] Referência do formato para autores (`docs/AUTHORING.md`), além do guia de porte.
+- [x] Referência do formato para autores (`docs/AUTHORING.md`), além do guia de porte.
+- [x] Guia de uso do programa (`docs/USO.md`).
+- [x] Predefinições de opções em `kbash-config/` (§9.4), com testes.
+- [x] Biblioteca da tela inicial com ícones (§10.0), e `needs_step` (§4.3).
 
 ---
 
