@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from fixtures.paths import HELPERS
 
-from kbash.core.errors import ValidationError
+from kbash.core.errors import PrecheckError, ValidationError
 from kbash.core.events import LogLine, PromptRequest
 from kbash.core.executor import Executor
 from kbash.core.ipc import CANCEL, IpcChannel
@@ -340,3 +340,36 @@ def test_validation_error_is_reported_before_any_run(tmp_path: Path) -> None:
     )
     with pytest.raises(ValidationError):
         parse_script(path)
+
+
+# ---------------------------------------------------------------------------
+# 6. Elevação (§9.2): autorização, wrapping real e prompts vindos de um step root
+# ---------------------------------------------------------------------------
+def test_root_flow_authorizes_then_answers_prompts_through_pkexec(
+    tmp_path: Path, fake_pkexec_on_path: Path
+) -> None:
+    path = write_script(
+        tmp_path,
+        "#@step aplicar\n#@root true\n"
+        "aplicar() { if rt_confirm 'Aplicar?' y; then rt_log aplicado; fi; }\n",
+    )
+    session = Session({"confirm": "yes"})
+    result = run_session(path, session)  # pkexec_authorize real, pkexec falso no PATH
+    assert result.status is RunState.SUCCESS
+    assert [p.kind for p in session.prompts] == ["confirm"]
+    assert "aplicado" in session.logs
+
+
+def test_root_flow_stops_before_any_step_when_authorization_is_denied(
+    tmp_path: Path, fake_pkexec_on_path: Path
+) -> None:
+    marker = tmp_path / "rodou"
+    (fake_pkexec_on_path / "pkexec").write_text("#!/bin/sh\nexit 126\n", encoding="utf-8")
+    path = write_script(
+        tmp_path,
+        "#@step um\num() { touch '" + str(marker) + "'; }\n"
+        "#@step raiz\n#@root true\nraiz() { touch '" + str(marker) + "-raiz'; }\n",
+    )
+    with pytest.raises(PrecheckError, match="autorização de root negada"):
+        run_session(path, Session())
+    assert not marker.exists() and not (tmp_path / "rodou-raiz").exists()

@@ -9,8 +9,8 @@
 #   - sem `sudo` nos comandos: o privilégio vem da elevação do kbash (SPEC.md §9.2).
 # Tudo que altera kernel, boot, DNS ou shell começa DESLIGADO e pede confirmação.
 # Passos marcados com `#@root true` rodam como root via pkexec (SPEC.md §9.2) e por isso
-# não chamam `sudo` por dentro. Nesta versão do kbash a elevação ainda está desligada:
-# esses passos falham sem privilégio. Use `kbash plan` para revisar antes.
+# não chamam `sudo` por dentro. Antes do primeiro passo root, o sistema mostra o diálogo
+# de autenticação (polkit), logo depois de você revisar o plano. Se negar, nada roda.
 #@runtime 1
 #@name Fedora Super Poderoso
 #@description Pós-instalação do Fedora 44: repositórios, codecs, drivers, Flatpak e ajustes opcionais.
