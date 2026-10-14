@@ -1,49 +1,41 @@
 #!/usr/bin/env bash
 # Pós-instalação do Fedora "Super Poderoso Caseiro 2026" (Fedora 44), portado para kbash.
-# Fonte: guia do rentry "fedorasuperpoderoso". Os comandos são os do guia; o que mudou:
-#   - a seção "Atualizar o sistema" termina com uma pergunta, não com `reboot` direto;
+# Fonte: guia do rentry "fedorasuperpoderoso".
+#
+# Como a interação está organizada neste exemplo:
+#   - OPÇÕES são valores que você escolhe no formulário (placa de vídeo, compressão do
+#     zram, escalonador eBPF). Nenhuma opção liga ou desliga uma ação.
+#   - STEPS são as ações marcadas na lista. O checkbox é que decide o que roda.
+#     Não há perguntas escondidas dentro dos steps.
+#   - A tela de revisão do plano é a única confirmação. Depois dela, o diálogo de
+#     autenticação (polkit) aparece uma vez, antes do primeiro step root.
+#
+# O que mudou em relação ao guia:
+#   - o `reboot` virou o step final "Reiniciar ao final", que começa desmarcado;
 #   - o bloco de DNS do guia tinha `&& \` antes do heredoc, o que faz o conteúdo do
 #     arquivo ser executado como comando. Aqui o heredoc está na forma correta;
-#   - `flatpak remote-delete fedora` só roda se o remote existir (senão o `set -e`
-#     pararia o passo por algo que já está resolvido);
+#   - `flatpak remote-delete fedora` só roda se o remote existir;
 #   - sem `sudo` nos comandos: o privilégio vem da elevação do kbash (SPEC.md §9.2).
-# Tudo que altera kernel, boot, DNS ou shell começa DESLIGADO e pede confirmação.
-# Passos marcados com `#@root true` rodam como root via pkexec (SPEC.md §9.2) e por isso
-# não chamam `sudo` por dentro. Antes do primeiro passo root, o sistema mostra o diálogo
-# de autenticação (polkit), logo depois de você revisar o plano. Se negar, nada roda.
+#
 #@runtime 1
 #@name Fedora Super Poderoso
 #@description Pós-instalação do Fedora 44: repositórios, codecs, drivers, Flatpak e ajustes opcionais.
-#@version 1.0.0
+#@version 1.1.0
 #@author Guia de rentry "fedorasuperpoderoso" (portado)
 #@requires dnf,flatpak,systemctl
 
-#@option gpu type=choice label="Placa de vídeo" choices="nenhuma,nvidia,amd,intel-nova,intel-antiga" default=nenhuma help="NVIDIA: siga o guia do RPM Fusion antes; não use este passo com Secure Boot ativo"
-#@option wifi_broadcom type=bool label="Wi-Fi Broadcom" default=false
-#@option bt_broadcom type=bool label="Bluetooth Broadcom" default=false
-#@option dvd type=bool label="Decodificar DVD e Blu-ray" default=false
-#@option zram_size type=choice label="Tamanho do zram" choices="ram,ram / 2" default=ram help="ram para 8 GB; ram / 2 para 16 GB ou mais"
-
-#@option extras type=paragraph label="As opções abaixo são opinativas e não são essenciais. Cada uma pede confirmação antes de alterar o sistema."
-#@option scheduler_ebpf type=bool label="Scheduler eBPF (scx_lavd)" default=false
-#@option preempt_lazy type=bool label="Kernel com preempt=lazy (kernel 6.13+)" default=false
-#@option zram_custom type=bool label="Configurar zram (lz4)" default=false
-#@option sysctl_zram type=bool label="Ajuste de memória (útil com 8 GB)" default=false
-#@option dns_adguard type=bool label="DNS AdGuard via TLS (pode ser frágil)" default=false
-#@option boot_rapido type=bool label="Não esperar a rede no boot" default=false
-#@option io_scheduler type=bool label="Scheduler de I/O por tipo de disco (udev)" default=false
-#@option fish type=bool label="Trocar o shell para fish (pode quebrar scripts)" default=false
-#@option cstate type=bool label="processor.max_cstate=1 (workaround AMD)" default=false
-#@option fontes type=bool label="freetype-freeworld (fontes melhores)" default=false
+# ---------------------------------------------------------------------------
+# Opções: valores escolhidos no formulário.
+# ---------------------------------------------------------------------------
+#@option gpu type=choice label="Placa de vídeo" choices="nenhuma,nvidia,amd,intel-nova,intel-antiga" default=nenhuma help="Usada pelo passo 'Drivers de vídeo'."
+#@option nvidia_secure_boot_off type=bool label="Confirmo que o Secure Boot está desligado" default=false help="Obrigatório para instalar o driver NVIDIA. Com Secure Boot ligado, siga o guia do RPM Fusion."
+#@option zram_tamanho type=choice label="Tamanho do zram" choices="ram,ram / 2" default=ram help="ram para 8 GB de RAM; ram / 2 para 16 GB ou mais. Usado pelo passo 'Configurar zram'."
+#@option zram_compressao type=choice label="Compressão do zram" choices="lz4,zstd" default=lz4 help="lz4 é mais rápido e o padrão do guia; zstd comprime melhor. Usado pelo passo 'Configurar zram'."
+#@option scx_sched type=choice label="Escalonador eBPF" choices="scx_lavd,scx_bpfland,scx_rusty,scx_cosmos" default=scx_lavd help="Usado pelo passo 'Scheduler eBPF'. lavd é o do guia; bpfland é uma alternativa mais leve para desktop."
 
 # ---------------------------------------------------------------------------
 # Funções auxiliares
 # ---------------------------------------------------------------------------
-# Passo sem a opção marcada: informa e termina bem.
-pular() {
-    rt_log "pulado: $*"
-}
-
 # Opção booleana marcada. A GUI envia 1/0 (SPEC §4.3); a CLI pode enviar true/false.
 ativo() {
     case "$1" in
@@ -52,18 +44,16 @@ ativo() {
     esac
 }
 
+# ---------------------------------------------------------------------------
+# Essencial (marcados por padrão)
+# ---------------------------------------------------------------------------
 #@step atualizar_sistema
 #@title Atualizar o sistema
-#@desc Atualiza todos os pacotes. Depois pergunta se é para reiniciar agora.
+#@desc Atualiza todos os pacotes do sistema.
 #@group Essencial
 #@root true
 atualizar_sistema() {
     dnf upgrade --refresh -y
-    if rt_confirm "Reiniciar agora para aplicar as atualizações?" n; then
-        reboot
-    else
-        rt_notify "Reinicie quando puder para aplicar as atualizações."
-    fi
 }
 
 #@step repos_rpmfusion
@@ -114,18 +104,6 @@ codecs() {
     dnf install -y mozilla-openh264 gstreamer1-plugin-openh264
 }
 
-#@step dvd_passo
-#@title Decodificação de DVD e Blu-ray
-#@desc Bibliotecas para ler discos protegidos. Quase ninguém precisa.
-#@group Codecs
-#@depends codecs
-#@default off
-#@root true
-dvd_passo() {
-    if ! ativo "$OPT_DVD"; then pular "DVD/Blu-ray (opção desmarcada)"; return 0; fi
-    dnf install -y libdvdcss libaacs libbdplus
-}
-
 #@step firmwares
 #@title Atualizar firmwares
 #@desc Atualiza os firmwares pelo fwupd.
@@ -136,42 +114,17 @@ firmwares() {
     fwupdmgr update
 }
 
-#@step firmware_wifi_broadcom
-#@title Firmware de Wi-Fi Broadcom
-#@desc Só para placas Broadcom.
-#@group Firmware
-#@depends firmwares
-#@default off
-#@root true
-firmware_wifi_broadcom() {
-    if ! ativo "$OPT_WIFI_BROADCOM"; then pular "Wi-Fi Broadcom (opção desmarcada)"; return 0; fi
-    dnf install -y b43-firmware
-}
-
-#@step firmware_bt_broadcom
-#@title Firmware de Bluetooth Broadcom
-#@desc Só para adaptadores Bluetooth Broadcom.
-#@group Firmware
-#@depends firmwares
-#@default off
-#@root true
-firmware_bt_broadcom() {
-    if ! ativo "$OPT_BT_BROADCOM"; then pular "Bluetooth Broadcom (opção desmarcada)"; return 0; fi
-    dnf install -y broadcom-bt-firmware
-}
-
 #@step drivers_gpu
 #@title Drivers de vídeo
-#@desc Instala o driver da placa escolhida. NVIDIA: veja a ressalva de Secure Boot.
+#@desc Instala o driver da placa escolhida na opção "Placa de vídeo".
 #@group Drivers
 #@depends repos_rpmfusion
 #@root true
 drivers_gpu() {
     case "$OPT_GPU" in
         nvidia)
-            rt_warn "O guia manda seguir o guia do RPM Fusion; este passo é o atalho."
-            if ! rt_confirm "Você NÃO tem Secure Boot ativo e já leu o guia do RPM Fusion?" n; then
-                pular "NVIDIA (sem confirmação de Secure Boot)"
+            if ! ativo "$OPT_NVIDIA_SECURE_BOOT_OFF"; then
+                rt_warn "NVIDIA não instalado: marque 'Secure Boot desligado' nas opções para liberar."
                 return 0
             fi
             dnf install -y akmod-nvidia
@@ -190,7 +143,7 @@ drivers_gpu() {
             dnf install -y libva-intel-driver
             ;;
         *)
-            pular "drivers de vídeo (nenhuma placa escolhida)"
+            rt_log "drivers de vídeo: nenhuma placa escolhida, nada a fazer"
             ;;
     esac
 }
@@ -206,7 +159,7 @@ configurar_flatpak() {
     if flatpak remote-list | grep -q '^fedora'; then
         flatpak remote-delete fedora --force
     else
-        pular "remote 'fedora' já não existe"
+        rt_log "remote 'fedora' já não existe"
     fi
 }
 
@@ -214,7 +167,6 @@ configurar_flatpak() {
 #@title Snapshots Btrfs
 #@desc Instala o Btrfs Assistant, útil para voltar o sistema se algo quebrar.
 #@group Essencial
-#@depends atualizar_sistema
 #@root true
 snapshots() {
     dnf install -y btrfs-assistant
@@ -246,26 +198,55 @@ limpeza() {
 }
 
 # ---------------------------------------------------------------------------
-# Extras opinativos (o guia diz que não são essenciais). Todos começam desligados.
+# Hardware específico (desmarcados por padrão)
+# ---------------------------------------------------------------------------
+#@step dvd_passo
+#@title Decodificação de DVD e Blu-ray
+#@desc Bibliotecas para ler discos protegidos. Quase ninguém precisa.
+#@group Hardware
+#@depends repos_rpmfusion
+#@default off
+#@root true
+dvd_passo() {
+    dnf install -y libdvdcss libaacs libbdplus
+}
+
+#@step firmware_wifi_broadcom
+#@title Firmware de Wi-Fi Broadcom
+#@desc Só para placas Wi-Fi Broadcom.
+#@group Hardware
+#@default off
+#@root true
+firmware_wifi_broadcom() {
+    dnf install -y b43-firmware
+}
+
+#@step firmware_bt_broadcom
+#@title Firmware de Bluetooth Broadcom
+#@desc Só para adaptadores Bluetooth Broadcom.
+#@group Hardware
+#@default off
+#@root true
+firmware_bt_broadcom() {
+    dnf install -y broadcom-bt-firmware
+}
+
+# ---------------------------------------------------------------------------
+# Extras opinativos (desmarcados por padrão; o guia diz que não são essenciais)
 # ---------------------------------------------------------------------------
 #@step scheduler_ebpf_passo
-#@title Scheduler eBPF (scx_lavd)
-#@desc Adiciona o COPR e configura o scx_loader para iniciar com o sistema.
+#@title Scheduler eBPF
+#@desc Instala o escalonador escolhido em "Escalonador eBPF" e o inicia com o sistema.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 scheduler_ebpf_passo() {
-    if ! ativo "$OPT_SCHEDULER_EBPF"; then pular "scheduler eBPF"; return 0; fi
-    if ! rt_confirm "Adicionar o COPR bieszczaders/kernel-cachyos-addons e instalar o scheduler?" n; then
-        pular "scheduler eBPF (não confirmado)"; return 0
-    fi
     dnf copr enable -y bieszczaders/kernel-cachyos-addons
     dnf install -y scx-scheds scx-tools
 
     mkdir -p /etc/scx_loader
-    tee /etc/scx_loader/config.toml > /dev/null << 'EOF'
-default_sched = "scx_lavd"
+    tee /etc/scx_loader/config.toml > /dev/null << EOF
+default_sched = "$OPT_SCX_SCHED"
 default_mode = "Auto"
 EOF
     systemctl enable --now scx_loader.service
@@ -273,36 +254,29 @@ EOF
 
 #@step preempt_lazy_passo
 #@title Kernel com preempt=lazy
-#@desc Troca latência por um pouco de desempenho. Precisa de kernel 6.13+.
+#@desc Troca um pouco de desempenho por latência. Precisa de kernel 6.13+. Vale no próximo boot.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 preempt_lazy_passo() {
-    if ! ativo "$OPT_PREEMPT_LAZY"; then pular "preempt=lazy"; return 0; fi
-    if ! rt_confirm "Adicionar preempt=lazy a todos os kernels? (vale no próximo boot)" n; then
-        pular "preempt=lazy (não confirmado)"; return 0
-    fi
     grubby --update-kernel=ALL --args="preempt=lazy"
-    rt_notify "Para verificar depois do boot: sudo dmesg | grep -i 'dynamic preempt' (deve mostrar lazy)"
+    rt_notify "Depois do boot: sudo dmesg | grep -i 'dynamic preempt' (deve mostrar lazy)"
 }
 
 #@step zram_passo
 #@title Configurar zram
-#@desc Tamanho e compressão do zram (lz4). O Fedora já traz zram configurado.
+#@desc Tamanho e compressão do zram, conforme as opções "Tamanho do zram" e "Compressão do zram".
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 zram_passo() {
-    if ! ativo "$OPT_ZRAM_CUSTOM"; then pular "zram"; return 0; fi
     local tamanho="ram"
-    [ "$OPT_ZRAM_SIZE" = "ram / 2" ] && tamanho="ram / 2"
+    [ "$OPT_ZRAM_TAMANHO" = "ram / 2" ] && tamanho="ram / 2"
     mkdir -p /etc/systemd/zram-generator.conf.d
     tee /etc/systemd/zram-generator.conf.d/custom.conf > /dev/null << EOF
 [zram0]
 zram-size = $tamanho
-compression-algorithm = lz4
+compression-algorithm = $OPT_ZRAM_COMPRESSAO
 EOF
 }
 
@@ -310,11 +284,9 @@ EOF
 #@title Ajuste de memória (sysctl)
 #@desc Ajustes de swap e cache. Só faz diferença com 8 GB de RAM.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 sysctl_zram_passo() {
-    if ! ativo "$OPT_SYSCTL_ZRAM"; then pular "ajuste de memória"; return 0; fi
     tee /etc/sysctl.d/99-zram-tuning.conf > /dev/null << 'EOF'
 vm.swappiness = 100
 vm.page-cluster = 0
@@ -330,16 +302,11 @@ EOF
 
 #@step dns_adguard_passo
 #@title DNS AdGuard via TLS
-#@desc Troca o DNS da rede pelo AdGuard, com DNS sobre TLS. O guia avisa que pode ser frágil.
+#@desc Troca o DNS da rede pelo AdGuard, com DNS sobre TLS. Frágil: se a rede falhar, remova /etc/systemd/resolved.conf.d/adguard.conf.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 dns_adguard_passo() {
-    if ! ativo "$OPT_DNS_ADGUARD"; then pular "DNS AdGuard"; return 0; fi
-    if ! rt_confirm "Trocar o DNS do sistema pelo AdGuard? Se a rede falhar, reverta removendo o arquivo adguard.conf." n; then
-        pular "DNS AdGuard (não confirmado)"; return 0
-    fi
     mkdir -p /etc/systemd/resolved.conf.d
     tee /etc/systemd/resolved.conf.d/adguard.conf > /dev/null << 'EOF'
 [Resolve]
@@ -352,13 +319,11 @@ EOF
 
 #@step boot_rapido_passo
 #@title Não esperar a rede no boot
-#@desc Desabilita o NetworkManager-wait-online. O guia diz que normalmente não há efeito colateral.
+#@desc Desabilita o NetworkManager-wait-online. Normalmente não tem efeito colateral.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 boot_rapido_passo() {
-    if ! ativo "$OPT_BOOT_RAPIDO"; then pular "boot rápido"; return 0; fi
     systemctl disable NetworkManager-wait-online.service
 }
 
@@ -366,16 +331,9 @@ boot_rapido_passo() {
 #@title Scheduler de I/O por tipo de disco
 #@desc Regras udev: none para NVMe, mq-deadline para SSD SATA e bfq para HDD.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 io_scheduler_passo() {
-    if ! ativo "$OPT_IO_SCHEDULER"; then pular "scheduler de I/O"; return 0; fi
-    if ! rt_confirm "Criar as regras udev de scheduler de I/O em /etc/udev/rules.d?" n; then
-        pular "scheduler de I/O (não confirmado)"; return 0
-    fi
-    rt_log "scheduler atual de nvme0n1: $(cat /sys/block/nvme0n1/queue/scheduler 2>/dev/null || echo 'não encontrado')"
-
     tee /etc/udev/rules.d/60-nvme-scheduler.rules > /dev/null << 'EOF'
 # NVMe: sem scheduler, o controle é feito pelo próprio drive
 ACTION=="add|change", KERNEL=="nvme[0-9]*", ATTR{queue/scheduler}="none"
@@ -393,34 +351,24 @@ EOF
 
 #@step fish_passo
 #@title Shell fish
-#@desc Troca o shell padrão pelo fish. Muitos scripts quebram nele.
+#@desc Troca o shell do seu usuário pelo fish. Muitos scripts que dependem do bash podem quebrar.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 fish_passo() {
-    if ! ativo "$OPT_FISH"; then pular "fish"; return 0; fi
-    if ! rt_confirm "Trocar o shell padrão pelo fish? Scripts que dependem do bash podem quebrar." n; then
-        pular "fish (não confirmado)"; return 0
-    fi
     dnf install -y fish
     dnf install -y util-linux-user
-    command -v fish | tee -a /etc/shells
+    command -v fish | tee -a /etc/shells > /dev/null
     chsh -s /usr/bin/fish "$USER"
 }
 
 #@step cstate_passo
 #@title Limitar C-state (AMD)
-#@desc Workaround para certos hardwares AMD. Provavelmente desnecessário em outras máquinas.
+#@desc Adiciona processor.max_cstate=1. Workaround para certos hardwares AMD; provavelmente desnecessário em outras máquinas.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 cstate_passo() {
-    if ! ativo "$OPT_CSTATE"; then pular "max_cstate"; return 0; fi
-    if ! rt_confirm "Adicionar processor.max_cstate=1 ao kernel? Só faz sentido em AMD com esse problema." n; then
-        pular "max_cstate (não confirmado)"; return 0
-    fi
     grubby --update-kernel=ALL --args="processor.max_cstate=1"
 }
 
@@ -428,10 +376,21 @@ cstate_passo() {
 #@title Fontes melhores
 #@desc Instala o freetype do RPM Fusion para renderização de fontes melhor.
 #@group Extras
-#@depends limpeza
 #@default off
 #@root true
 fontes_passo() {
-    if ! ativo "$OPT_FONTES"; then pular "freetype-freeworld"; return 0; fi
     dnf install -y freetype-freeworld
+}
+
+# ---------------------------------------------------------------------------
+# Final
+# ---------------------------------------------------------------------------
+#@step reiniciar_passo
+#@title Reiniciar ao final
+#@desc Reinicia o computador quando o script terminar. Marque só se quiser aplicar tudo agora.
+#@group Final
+#@default off
+#@root true
+reiniciar_passo() {
+    reboot
 }
