@@ -7,3 +7,6 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# predefinições do usuário (gui/presets.py): ficam na pasta do programa
+/kbash-config/

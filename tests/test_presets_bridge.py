@@ -36,7 +36,7 @@ def home(tmp_path: Path, monkeypatch) -> Path:
     return program
 
 
-def _bridge(tmp_path: Path, app) -> object:  # noqa: ARG001
+def _bridge(tmp_path: Path, app) -> object:
     script = tmp_path / "backup.kbash"
     script.write_text(SCRIPT, encoding="utf-8")
     return load_bridge(script)

@@ -524,6 +524,14 @@ Regras:
 ### 9.3 Logs persistentes
 Planejado: `$XDG_STATE_HOME/<id>/logs/AAAA-MM-DD_HH-MM-SS.log`, com timestamp, step e stream por linha, mantendo os últimos 20. **Não implementado** (Fase 6). Hoje o log só existe na tela e pode ser salvo pelo usuário (*Salvar log*).
 
+### 9.4 Predefinições de opções
+- **Pasta:** `kbash-config/` na pasta do programa: a do `.AppImage` (via `APPIMAGE`); em desenvolvimento, a raiz do projeto (ignorada pelo git).
+- **Arquivo:** um JSON por script, `kbash-config/<id-do-script>.json`, com sintaxe simples: `{"Nome": {"opcao": "valor"}}`. Chaves externas são os nomes das predefinições; internas, os ids das opções; valores são texto (booleanos viram `1`/`0`).
+- **Senhas:** opções `type=password` nunca são gravadas, e não são alteradas ao carregar uma predefinição.
+- **Gravação:** atômica (arquivo temporário + troca). Se o arquivo existente estiver corrompido, *salvar* é recusado para não apagar o conteúdo; a leitura avisa e segue sem predefinições.
+- **Interface:** no cartão Opções, uma linha com *Predefinição* (escolher aplica os valores), *Salvar como…* e *Apagar*.
+- **Implementação:** `gui/presets.py` (sem Qt, testado) e `Bridge.savePreset`/`loadPreset`/`deletePreset`.
+
 ---
 
 ## 10. GUI

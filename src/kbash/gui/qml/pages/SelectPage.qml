@@ -55,6 +55,60 @@ AppPage {
             text: qsTr("Nenhuma opção declarada")
             explanation: qsTr("Um script declara opções com #@option no cabeçalho.")
         }
+
+        // predefinições (kbash-config/, gui/presets.py): escolher, salvar e apagar
+        RowLayout {
+            Layout.fillWidth: true
+            visible: bridge.optionCount > 0
+            spacing: theme.smallSpacing
+
+            Label {
+                text: qsTr("Predefinição")
+                opacity: 0.8
+            }
+            AppComboBox {
+                id: presetBox
+                Layout.fillWidth: true
+                model: bridge.presetNames
+                displayText: count === 0 ? qsTr("nenhuma salva") : currentText
+                currentIndex: -1
+                onActivated: bridge.loadPreset(currentText)
+            }
+            AppButton {
+                text: qsTr("Apagar")
+                enabled: presetBox.currentIndex >= 0
+                onClicked: {
+                    bridge.deletePreset(presetBox.currentText)
+                    presetBox.currentIndex = -1
+                }
+            }
+            AppButton {
+                text: qsTr("Salvar como…")
+                variant: "primary"
+                onClicked: {
+                    presetName.text = ""
+                    saveDialog.open()
+                }
+            }
+        }
+    }
+
+    // salvar: nome da predefinição; senhas nunca entram (ver gui/presets.py)
+    AppDialog {
+        id: saveDialog
+        dialogTitle: qsTr("Salvar predefinição")
+        message: qsTr("Os valores atuais das opções ficam salvos em kbash-config/. Senhas não são salvas.")
+        acceptText: qsTr("Salvar")
+        onAccepted: {
+            if (bridge.savePreset(presetName.text))
+                presetBox.currentIndex = -1
+        }
+
+        AppTextField {
+            id: presetName
+            placeholderText: qsTr("Nome, ex.: Backup casa")
+            onAccepted: saveDialog.accept()
+        }
     }
 
     // -- etapas agrupadas (§4.4) ---------------------------------------
