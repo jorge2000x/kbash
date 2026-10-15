@@ -226,6 +226,8 @@ class OptionModel(QAbstractListModel):
     Url = _role("url", 19)
     #: `needs_step` (SPEC §4.3): id do step dono, ou "" para opção geral.
     Owner = _role("owner", 20)
+    #: §4.8.1: grupo de exibição (`group=`); "" = bloco sem título.
+    Group = _role("group", 21)
 
     _NAMES = {
         OptId: b"optId",
@@ -248,6 +250,7 @@ class OptionModel(QAbstractListModel):
         Visible: b"visible",
         Url: b"url",
         Owner: b"owner",
+        Group: b"group",
     }
 
     def __init__(self, parent: Any = None) -> None:
@@ -268,7 +271,7 @@ class OptionModel(QAbstractListModel):
         return 0 if parent.isValid() or self._script is None else len(self._script.options)
 
     def general_count(self) -> int:
-        """Opções gerais, sem `needs_step`: as que ficam no cartão Opções (§10.2.2)."""
+        """Opções gerais, sem `needs_step`: as que não estão dentro de um step (§4.8.1)."""
         if self._script is None:
             return 0
         return sum(1 for option in self._script.options if option.needs_step is None)
@@ -327,6 +330,8 @@ class OptionModel(QAbstractListModel):
                 return self._visible[row] if row < len(self._visible) else False
             case self.Owner:
                 return option.needs_step or ""
+            case self.Group:
+                return option.group or ""
             case self.Url:
                 return option.url
         return None
@@ -397,6 +402,39 @@ class OptionModel(QAbstractListModel):
     def reload_errors(self) -> None:
         for row in range(self.rowCount()):
             self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [self.Error])
+
+
+class GroupProxy(QSortFilterProxyModel):
+    """§4.8.1 — um bloco da tela de Seleção: só os itens do grupo ``group``.
+
+    ``general=True`` (opções) deixa de fora as ligadas a um step: essas aparecem
+    dentro da linha do próprio step. Criado uma vez por grupo e reaproveitado
+    entre carregamentos, porque os modelos de origem são os mesmos objetos.
+    """
+
+    def __init__(
+        self,
+        source: QAbstractListModel,
+        group_role: int,
+        group: str,
+        *,
+        general: bool,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._group_role = group_role
+        self._group = group
+        self._general = general
+        self.setSourceModel(source)
+
+    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
+        source = self.sourceModel()
+        if source is None:
+            return False
+        index = source.index(source_row, 0, source_parent)
+        if source.data(index, self._group_role) != self._group:
+            return False
+        return not (self._general and source.data(index, OptionModel.Owner))
 
 
 class SelectedStepsProxy(QSortFilterProxyModel):

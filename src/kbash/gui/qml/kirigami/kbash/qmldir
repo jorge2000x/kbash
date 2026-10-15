@@ -12,6 +12,7 @@ OptionField 1.0 OptionField.qml
 PromptDialog 1.0 PromptDialog.qml
 StepBadge 1.0 StepBadge.qml
 StepRow 1.0 StepRow.qml
+ActionRow 1.0 ActionRow.qml
 AppIcon 1.0 AppIcon.qml
 InlineMessage 1.0 InlineMessage.qml
 AppTextField 1.0 AppTextField.qml

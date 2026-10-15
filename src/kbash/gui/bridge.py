@@ -11,6 +11,7 @@ modelos/propriedades — nenhum ``QAbstractListModel`` é tocado de fora (§10.3
 from __future__ import annotations
 
 import queue
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,15 @@ from ..core.events import (
     StepStarted,
 )
 from ..core.errors import KbashError
-from ..core.executor import Executor, StepResult, helpers_path, precheck
+from ..core.actions import run_action
+from ..core.executor import (
+    PRIVILEGE_ELEVATION,
+    Executor,
+    StepResult,
+    helpers_path,
+    pkexec_authorize,
+    precheck,
+)
 from ..core.parser import parse_script
 from ..core.ipc import IpcChannel
 from ..core.model import RunPlan, RunState, Script, StepState, is_allowed_link, placeholder_script
@@ -46,7 +55,7 @@ from ..core.planner import (
 from ..core.ui import Prompt
 from .library import list_library, resolve_icon
 from .presets import PresetError, check_name, read_presets, write_presets
-from .models import LogModel, OptionModel, SelectedStepsProxy, StepListModel
+from .models import GroupProxy, LogModel, OptionModel, SelectedStepsProxy, StepListModel
 from .ui_qt import QtUi
 
 __all__ = ["Bridge", "PAGE_WELCOME", "PAGE_SELECT", "PAGE_RUN", "PAGE_RESULT", "TICK_MS"]
@@ -101,6 +110,8 @@ class Bridge(QObject):
 
     # -- sinais para o QML ----------------------------------------------
     promptRequested = Signal(str, str, str, str, "QVariant", "QStringList", bool, bool, str, str)
+    #: §4.8 — fim de uma ação (vem da thread da ação; entrega na thread da GUI)
+    _actionDone = Signal(str, str, int, str)
     notifyRaised = Signal(str, str)
     # -- portal de arquivos (§10.1): (token, caminhos); vazio = cancelado/falha
     filePicked = Signal(str, "QStringList")
@@ -168,6 +179,10 @@ class Bridge(QObject):
         self._run_steps.setSourceModel(self._steps_model)
         self._steps_model.load(script)
         self._options_model.load(script, default_options(script))
+        self._group_proxies: dict[tuple[str, str], QObject] = {}
+        self._actions: dict[str, dict[str, Any]] = {}
+        self._reset_actions(script)
+        self._actionDone.connect(self._on_action_done)
         self._refresh_selection()
         self._reload_presets()
         self._timer = QTimer(self)
@@ -317,7 +332,15 @@ class Bridge(QObject):
 
     optionCountChanged = Signal()
     optionCount = Property(int, lambda self: self._options_model.rowCount(), notify=optionCountChanged)
-    # opções gerais (sem needs_step): o cartão Opções da seleção usa esta contagem
+
+    #: §4.8.1 — grupos na ordem de declaração ("" = bloco sem título)
+    groupsChanged = Signal()
+    groupNames = Property("QStringList", lambda self: list(self._script.groups) if self._script else [], notify=groupsChanged)
+
+    #: §4.8 — ações e o último resultado de cada uma (dicts para o QML)
+    actionsChanged = Signal()
+    actions = Property("QVariantList", lambda self: [dict(v) for v in self._actions.values()], notify=actionsChanged)
+    # opções gerais (sem needs_step): usada para mostrar a linha de predefinições
     generalOptionCount = Property(
         int, lambda self: self._options_model.general_count(), notify=optionCountChanged
     )
@@ -333,6 +356,92 @@ class Bridge(QObject):
     # ------------------------------------------------------------------
     # Slots
     # ------------------------------------------------------------------
+    # -- grupos e ações (§4.8, §4.8.1) -----------------------------------
+    def _reset_actions(self, script: Script) -> None:
+        self._actions = {
+            action.id: {
+                "id": action.id,
+                "title": action.title,
+                "description": action.description,
+                "button": action.button,
+                "group": action.group or "",
+                "root": action.root,
+                "running": False,
+                "status": "",
+                "exitCode": -1,
+                "output": "",
+            }
+            for action in script.actions
+        }
+        self.groupsChanged.emit()
+        self.actionsChanged.emit()
+
+    @Slot(str, result=QObject)
+    def optionsFor(self, group: str) -> QObject:  # noqa: N802
+        """Opções gerais do bloco ``group`` (proxy reaproveitado)."""
+        return self._group_proxy("options", group)
+
+    @Slot(str, result=QObject)
+    def stepsFor(self, group: str) -> QObject:  # noqa: N802
+        """Steps do bloco ``group`` (proxy reaproveitado)."""
+        return self._group_proxy("steps", group)
+
+    def _group_proxy(self, kind: str, group: str) -> QObject:
+        key = (kind, group)
+        if key not in self._group_proxies:
+            if kind == "options":
+                self._group_proxies[key] = GroupProxy(
+                    self._options_model, OptionModel.Group, group, general=True, parent=self
+                )
+            else:
+                self._group_proxies[key] = GroupProxy(
+                    self._steps_model, StepListModel.Group, group, general=False, parent=self
+                )
+        return self._group_proxies[key]
+
+    @Slot(str)
+    def runAction(self, action_id: str) -> None:  # noqa: N802
+        """§4.8/§7.6 — roda uma ação numa thread, com os valores atuais da tela."""
+        state = self._actions.get(action_id)
+        if self._script is None or state is None or self._running:
+            return
+        if any(item["running"] for item in self._actions.values()):
+            return
+        action = self._script.action(action_id)
+        if action is None:
+            return
+        state.update(running=True, status="", exitCode=-1, output="")
+        self.actionsChanged.emit()
+        script = self._script
+        values = self._options_model.values()
+        selected = set(self._steps_model.checked_ids())
+        assets = self._assets
+
+        def worker() -> None:
+            status, code, output = "error", None, ""
+            try:
+                if action.root and PRIVILEGE_ELEVATION and not pkexec_authorize():
+                    output = "autorização de root negada ou cancelada"
+                else:
+                    with tempfile.TemporaryDirectory(prefix="kbash-acao-") as tmp:
+                        result = run_action(
+                            script, action, values, selected,
+                            helpers=helpers_path(), assets=assets, workdir=tmp,
+                        )
+                    status, code, output = result.status, result.exit_code, result.output
+            except Exception as exc:  # noqa: BLE001 — a thread não pode morrer calada
+                output = str(exc)
+            self._actionDone.emit(action_id, status, -1 if code is None else code, output)
+
+        threading.Thread(target=worker, name="kbash-action", daemon=True).start()
+
+    def _on_action_done(self, action_id: str, status: str, code: int, output: str) -> None:
+        state = self._actions.get(action_id)
+        if state is None:
+            return
+        state.update(running=False, status=status, exitCode=code, output=output)
+        self.actionsChanged.emit()
+
     @Slot(int)
     def goToPage(self, page: int) -> None:  # noqa: N802
         """§10.2 — troca de tela a pedido de um botão.
@@ -478,6 +587,7 @@ class Bridge(QObject):
         self._precheck_problems = []
         self._steps_model.load(script)
         self._options_model.load(script, default_options(script))
+        self._reset_actions(script)
         self._refresh_selection()
         self._reload_presets()
         self._set_page(PAGE_WELCOME)

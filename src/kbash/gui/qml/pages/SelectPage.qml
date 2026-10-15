@@ -1,6 +1,7 @@
 // 2. Seleção (SPEC.md §10.2.2).
-// A estrutura é sempre a mesma: Opções · Etapas · Antes de executar · Ações.
-// O que muda é só o conteúdo de cada cartão — nada some, nada salta (§10.4).
+// Não há cartões fixos de *Opções* e *Etapas*: o autor do script decide o
+// agrupamento com `group=` (opções) e `#@group` (steps e ações) — §4.8.1.
+// Dentro de um bloco a ordem é fixa: opções gerais, etapas e depois ações.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -12,83 +13,38 @@ AppPage {
     heading: bridge.scriptName
     subheading: qsTr("Escolha as opções e as etapas")
 
-    // -- opções (§4.3) --------------------------------------------------
-    AppCard {
+    // predefinições (§9.4): escolher, salvar e apagar; sem cartão próprio
+    RowLayout {
         Layout.fillWidth: true
-        title: qsTr("Opções")
-        // o cartão fica sempre (estrutura estável, §10.4); sem opções gerais, diz onde estão
-        subtitle: bridge.generalOptionCount > 0
-            ? qsTr("Preencha antes de executar.")
-            : bridge.optionCount > 0
-                ? qsTr("As opções ficam junto das etapas que configuram.")
-                : qsTr("Este script não pede opções.")
+        visible: bridge.optionCount > 0
+        spacing: theme.smallSpacing
 
-        // só as opções gerais; as ligadas a um step ficam dentro da linha do step
-        Repeater {
-            model: bridge.options
-            delegate: OptionField {
-                visible: model.visible && model.owner === ""
-                optId: model.optId
-                type: model.type
-                label: model.label
-                value: model.value
-                choices: model.choices
-                required: model.required
-                error: model.error
-                help: model.help
-                minimum: model.minimum
-                maximum: model.maximum
-                step: model.step
-                filters: model.filters
-                url: model.url
-                pattern: model.pattern
-                minlen: model.minlen
-                maxlen: model.maxlen
-                multiple: model.multiple
+        Label {
+            text: qsTr("Predefinição")
+            opacity: 0.8
+        }
+        AppComboBox {
+            id: presetBox
+            Layout.fillWidth: true
+            model: bridge.presetNames
+            displayText: count === 0 ? qsTr("nenhuma salva") : currentText
+            currentIndex: -1
+            onActivated: bridge.loadPreset(currentText)
+        }
+        AppButton {
+            text: qsTr("Apagar")
+            enabled: presetBox.currentIndex >= 0
+            onClicked: {
+                bridge.deletePreset(presetBox.currentText)
+                presetBox.currentIndex = -1
             }
         }
-
-        AppPlaceholder {
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.smallSpacing
-            visible: bridge.optionCount === 0
-            text: qsTr("Nenhuma opção declarada")
-            explanation: qsTr("Um script declara opções com #@option no cabeçalho.")
-        }
-
-        // predefinições (kbash-config/, gui/presets.py): escolher, salvar e apagar
-        RowLayout {
-            Layout.fillWidth: true
-            visible: bridge.optionCount > 0
-            spacing: theme.smallSpacing
-
-            Label {
-                text: qsTr("Predefinição")
-                opacity: 0.8
-            }
-            AppComboBox {
-                id: presetBox
-                Layout.fillWidth: true
-                model: bridge.presetNames
-                displayText: count === 0 ? qsTr("nenhuma salva") : currentText
-                currentIndex: -1
-                onActivated: bridge.loadPreset(currentText)
-            }
-            AppButton {
-                text: qsTr("Apagar")
-                enabled: presetBox.currentIndex >= 0
-                onClicked: {
-                    bridge.deletePreset(presetBox.currentText)
-                    presetBox.currentIndex = -1
-                }
-            }
-            AppButton {
-                text: qsTr("Salvar como…")
-                variant: "primary"
-                onClicked: {
-                    presetName.text = ""
-                    saveDialog.open()
-                }
+        AppButton {
+            text: qsTr("Salvar como…")
+            variant: "primary"
+            onClicked: {
+                presetName.text = ""
+                saveDialog.open()
             }
         }
     }
@@ -111,76 +67,103 @@ AppPage {
         }
     }
 
-    // -- etapas agrupadas (§4.4) ---------------------------------------
+    // -- blocos definidos pelo script (§4.8.1) --------------------------
     AppCard {
         Layout.fillWidth: true
-        title: qsTr("Etapas")
-        subtitle: qsTr("Etapas marcadas como dependência entram automaticamente.")
+        visible: bridge.optionCount > 0 || bridge.stepCount > 0 || bridge.actions.length > 0
 
-        ListView {
-            id: stepsView
-            // reaproveita as linhas ao rolar (cache de delegates) em vez de recriar StepRow
-            reuseItems: true
-            cacheBuffer: 400
-            Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(contentHeight, 400)
-            Layout.minimumHeight: 60
-            visible: count > 0
-            clip: true
-            spacing: 2
-            model: bridge.steps
-            boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar {}
+        Repeater {
+            model: bridge.groupNames
+            delegate: ColumnLayout {
+                id: block
+                // nome do grupo; "" é o bloco sem título
+                required property string modelData
+                readonly property string groupName: modelData
 
-            section.property: "group"
-            section.criteria: ViewSection.FullString
-            section.delegate: Item {
-                width: stepsView.width
-                height: section !== "" ? sectionLabel.implicitHeight + 2 * theme.largeSpacing : 0
-                visible: section !== ""
-                Label {
-                    id: sectionLabel
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: sectionLine.top
-                    anchors.bottomMargin: theme.smallSpacing
-                    anchors.leftMargin: theme.smallSpacing
-                    text: section
-                    font.pixelSize: theme.smallFont
-                    opacity: 0.7
-                    elide: Text.ElideRight
+                Layout.fillWidth: true
+                spacing: theme.smallSpacing
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: theme.largeSpacing
+                    visible: block.groupName !== ""
+                    spacing: theme.smallSpacing
+
+                    Label {
+                        text: block.groupName
+                        font.pixelSize: theme.smallFont
+                        opacity: 0.7
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
                 }
-                Kirigami.Separator {
-                    id: sectionLine
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                }
-            }
 
-            delegate: StepRow {
-                width: stepsView.width
-                stepId: model.stepId
-                title: model.title
-                description: model.description
-                group: model.group
-                checked: model.checked
-                locked: model.locked
-                status: model.status
-                needsRoot: model.root
-                duration: model.duration
-                required: model.required
-                autoAdded: model.autoAdded
-                reason: model.reason
-                statusLabel: model.statusLabel
+                // opções gerais do bloco (sem needs_step)
+                Repeater {
+                    model: bridge.optionsFor(block.groupName)
+                    delegate: OptionField {
+                        visible: model.visible
+                        optId: model.optId
+                        type: model.type
+                        label: model.label
+                        value: model.value
+                        choices: model.choices
+                        required: model.required
+                        error: model.error
+                        help: model.help
+                        minimum: model.minimum
+                        maximum: model.maximum
+                        step: model.step
+                        filters: model.filters
+                        url: model.url
+                        pattern: model.pattern
+                        minlen: model.minlen
+                        maxlen: model.maxlen
+                        multiple: model.multiple
+                    }
+                }
+
+                // etapas do bloco; as opções de cada uma aparecem dentro da linha
+                Repeater {
+                    model: bridge.stepsFor(block.groupName)
+                    delegate: StepRow {
+                        Layout.fillWidth: true
+                        stepId: model.stepId
+                        title: model.title
+                        description: model.description
+                        group: model.group
+                        checked: model.checked
+                        locked: model.locked
+                        status: model.status
+                        needsRoot: model.root
+                        duration: model.duration
+                        required: model.required
+                        autoAdded: model.autoAdded
+                        reason: model.reason
+                        statusLabel: model.statusLabel
+                    }
+                }
+
+                // ações (§4.8): só as do próprio grupo
+                Repeater {
+                    model: bridge.actions
+                    delegate: ActionRow {
+                        required property var modelData
+                        visible: modelData.group === block.groupName
+                        action: modelData
+                    }
+                }
             }
         }
 
         AppPlaceholder {
             Layout.fillWidth: true
-            visible: bridge.stepCount === 0
-            text: qsTr("Nenhuma etapa declarada")
-            explanation: qsTr("Um script declara etapas com #@step. Nada será executado.")
+            visible: bridge.optionCount === 0 && bridge.stepCount === 0 && bridge.actions.length === 0
+            text: qsTr("Nada para configurar")
+            explanation: qsTr("Um script declara opções com #@option, etapas com #@step e ações com #@action.")
         }
     }
 
@@ -211,7 +194,7 @@ AppPage {
         }
     }
 
-    // -- ações ---------------------------------------------------------
+    // -- ações da tela ---------------------------------------------------
     RowLayout {
         Layout.fillWidth: true
         spacing: theme.largeSpacing
