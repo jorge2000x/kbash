@@ -142,6 +142,19 @@ rt__ask_terminal() {  # $1 = pergunta, $2 = valor padrão, $3 = "secret" → imp
 # Log e notificação
 # ---------------------------------------------------------------------------
 
+# §4.8 — ação não é interativa: um helper de entrada falha na hora, com
+# mensagem, e encerra a ação (SIGTERM ao próprio processo do script, que também
+# funciona de dentro de $(...)). Sem isso, o fallback de terminal leria EOF e
+# devolveria o padrão em silêncio.
+rt__no_interaction() {
+    if [ "${RT_MODE:-}" = action ]; then
+        printf 'kbash: %s não é interativo dentro de uma ação (SPEC.md §4.8)\n' "$1" >&2
+        kill -TERM $$ 2>/dev/null
+        return 1
+    fi
+    return 0
+}
+
 rt_log()   { _rt_log_line info  "$@"; }
 rt_warn()  { _rt_log_line warn  "$@"; }
 rt_error() { _rt_log_line error "$@"; }
@@ -197,6 +210,7 @@ rt_progress() {
 
 # rt_confirm "pergunta" [y|n]  → 0 (sim) / 1 (não)
 rt_confirm() {
+    rt__no_interaction "rt_confirm" || return 1
     local text=${1-} default=${2-n} id reply status value
     if [ "$_RT_FD" != 1 ]; then
         local hint="[y/N]"
@@ -228,6 +242,7 @@ rt_input() { _rt_ask input "$@"; }
 rt_secret() { _rt_ask secret "$@"; }
 
 _rt_ask() {
+    rt__no_interaction "helper de entrada" || return 1
     local kind=$1 label=${2-} fallback=${3-} id reply status value secret=false
     # §8.2 — rt_secret é o mesmo "input" com secret=true
     [ "$kind" = secret ] && secret=true
@@ -259,6 +274,7 @@ rt_choice() { _rt_pick choice false "$@"; }
 rt_multi() { _rt_pick choice true "$@"; }
 
 _rt_pick() {
+    rt__no_interaction "helper de escolha" || return 1
     local kind=$1 multi=$2 label=${3-}
     shift 3
     local -a choices=("$@")
@@ -310,6 +326,7 @@ _rt_request() {  # $1 = id da requisição
 
 # rt_number "rótulo" [padrão] [min] [max] → imprime o número
 rt_number() {
+    rt__no_interaction "rt_number" || return 1
     local label=${1-} fallback=${2-} min=${3-} max=${4-} id bounds="" answer ok
     if [ "$_RT_FD" != 1 ]; then
         if [ -n "$min" ] || [ -n "$max" ]; then bounds=" (${min:-…}–${max:-…})"; fi
@@ -335,6 +352,7 @@ rt_number() {
 
 # rt_date "rótulo" [padrão-AAAA-MM-DD] → imprime em ISO (kdialog --calendar)
 rt_date() {
+    rt__no_interaction "rt_date" || return 1
     local label=${1-} fallback=${2-} id answer has_dated=false
     if [ "$_RT_FD" != 1 ]; then
         date -d "2000-01-01" "+%F" >/dev/null 2>&1 && has_dated=true
@@ -356,6 +374,7 @@ rt_date() {
 
 # rt_time "rótulo" [padrão-HH:MM] → imprime HH:MM (24h)
 rt_time() {
+    rt__no_interaction "rt_time" || return 1
     local label=${1-} fallback=${2-} id answer
     if [ "$_RT_FD" != 1 ]; then
         while :; do
@@ -375,6 +394,7 @@ rt_time() {
 
 # rt_file "rótulo" [padrão] [filtro...] → imprime o caminho do arquivo
 rt_file() {
+    rt__no_interaction "rt_file" || return 1
     local label=${1-} fallback=${2-} id answer
     shift 2 || shift "$#"
     local -a filters=("$@")
@@ -390,6 +410,7 @@ rt_file() {
 
 # rt_text "rótulo" [padrão] → texto multilinha; termina com linha só com ponto
 rt_text() {
+    rt__no_interaction "rt_text" || return 1
     local label=${1-} fallback=${2-} id line lines=""
     if [ "$_RT_FD" != 1 ]; then
         printf '%s (termine com uma linha só com ponto)\n' "$label" >&2
@@ -408,6 +429,7 @@ rt_text() {
 
 # rt_textbox "título" "texto" → mostra texto longo só-leitura; Enter fecha
 rt_textbox() {
+    rt__no_interaction "rt_textbox" || return 1
     local title=${1-} content=${2-} id
     if [ "$_RT_FD" != 1 ]; then
         printf '%s\n' "$content" >&2
@@ -425,6 +447,7 @@ rt_textbox() {
 
 # rt_progresswin_start max "rótulo" → abre a janela de progresso (kdialog --progressbar)
 rt_progresswin_start() {
+    rt__no_interaction "rt_progresswin_start" || return 1
     local max=${1-} label=${2-} id
     if [ "$_RT_FD" != 1 ]; then
         printf '↳ %s (0/%s)\n' "$label" "$max" >&2
