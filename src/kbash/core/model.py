@@ -11,6 +11,7 @@ from pathlib import Path
 __all__ = [
     "Option",
     "Step",
+    "Action",
     "Script",
     "RunPlan",
     "StepState",
@@ -169,6 +170,8 @@ class Option:
     #: Opção ligada a um step (``needs_step=<id>``): só aparece e vale quando o
     #: step está selecionado (efetivamente, depois das dependências).
     needs_step: str | None = None
+    #: §4.8.1: grupo de exibição da opção geral (`group=`). `None` = bloco sem título.
+    group: str | None = None
     line: int = 0
 
     @property
@@ -207,6 +210,21 @@ class Step:
 
 
 @dataclass(frozen=True)
+class Action:
+    """§4.8. Mini-script rodado sob demanda pela tela de Seleção, fora do plano."""
+
+    id: str
+    function: str
+    title: str
+    description: str = ""
+    button: str = "Executar"
+    group: str | None = None
+    root: bool = False
+    timeout: int = 60
+    line: int = 0
+
+
+@dataclass(frozen=True)
 class Script:
     """§5."""
 
@@ -223,6 +241,13 @@ class Script:
     strict: bool = True
     options: tuple[Option, ...] = ()
     steps: tuple[Step, ...] = ()
+    actions: tuple[Action, ...] = ()
+
+    def action(self, action_id: str) -> Action | None:
+        for candidate in self.actions:
+            if candidate.id == action_id:
+                return candidate
+        return None
 
     def step(self, step_id: str) -> Step | None:
         for candidate in self.steps:
@@ -238,11 +263,20 @@ class Script:
 
     @property
     def groups(self) -> tuple[str, ...]:
-        """Ordem dos grupos na declaração, sem duplicatas e sem ``None``."""
+        """§4.8.1 — grupos na ordem da primeira declaração (linha) entre opções
+        gerais, steps e ações. ``""`` é o bloco sem título. Opção com
+        ``needs_step`` não entra: aparece dentro da linha do seu step."""
+        items: list[tuple[int, str]] = [
+            (option.line, option.group or "")
+            for option in self.options
+            if option.needs_step is None
+        ]
+        items += [(step.line, step.group or "") for step in self.steps]
+        items += [(action.line, action.group or "") for action in self.actions]
         seen: list[str] = []
-        for step in self.steps:
-            if step.group and step.group not in seen:
-                seen.append(step.group)
+        for _, name in sorted(items):
+            if name not in seen:
+                seen.append(name)
         return tuple(seen)
 
 

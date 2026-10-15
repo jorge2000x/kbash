@@ -63,7 +63,8 @@ def test_attributes() -> None:
     assert script.icon == "computer"
     assert script.requires == ("curl", "git")
     assert script.strict is False
-    assert script.groups == ("Preparação", "Ferramentas")
+    # §4.8.1: opções sem group e steps sem #@group formam o bloco sem título ("")
+    assert script.groups == ("", "Preparação", "Ferramentas")
     assert [option.id for option in script.options] == [
         "editor", "name", "token", "dir", "plugins", "telemetry",
     ]

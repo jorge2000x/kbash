@@ -19,6 +19,7 @@ from .model import (
     OPTION_TYPES,
     is_allowed_link,
     RUNTIME_VERSION_SUPPORTED,
+    Action,
     Option,
     Script,
     Step,
@@ -32,7 +33,9 @@ from .model import (
 __all__ = ["ParseResult", "parse_text", "parse_script", "check_script", "sha256_of"]
 
 ANNOTATION = "#@"
-BLOCK_START = ("step", "option")
+BLOCK_START = ("step", "action", "option")
+#: §4.4/§4.8 — blocos que precisam de definição de função logo abaixo.
+FUNCTION_KINDS = frozenset({"step", "action"})
 
 #: §4.1 — ``nome() {``, ``function nome {``, ``function nome() {}`` e variantes
 #: de uma linha (``nome() { cmd; }``). Aregex é de *prefixo*; refinamos abaixo
@@ -56,15 +59,22 @@ FALSY = frozenset({"0", "false", "off", "no", "nao", "não", "n"})
 STEP_ATTRS = frozenset(
     {"title", "desc", "group", "default", "required", "depends", "root", "timeout", "on_error", "function"}
 )
+#: §4.8 — ação: mesmas diretivas de step que fazem sentido, mais `button`.
+ACTION_ATTRS = frozenset(
+    {"title", "desc", "group", "root", "timeout", "function", "button",
+     "default", "required", "depends", "on_error"}  # os quatro últimos: aviso e ignorados
+)
+#: §4.8 — diretivas de ação que não valem (viram aviso).
+ACTION_IGNORED = ("default", "required", "depends", "on_error")
 OPTION_ATTRS = frozenset(
     {"type", "label", "default", "choices", "required", "help",
      "min", "max", "step", "filters", "pattern", "minlen", "maxlen", "multiple",
-     "show_if", "url", "needs_step"}
+     "show_if", "url", "needs_step", "group"}
 )
 HEADER_ATTRS = frozenset(
     {"runtime", "name", "id", "description", "version", "author", "icon", "requires", "strict"}
 )
-KNOWN_DIRECTIVES = HEADER_ATTRS | {"step", "option"} | STEP_ATTRS | OPTION_ATTRS
+KNOWN_DIRECTIVES = HEADER_ATTRS | {"step", "action", "option"} | STEP_ATTRS | ACTION_ATTRS | OPTION_ATTRS
 
 
 def sha256_of(path: Path) -> str:
@@ -225,9 +235,9 @@ class _Parser:
                 self._handle_code(code, number)
             else:
                 self._handle_annotation(raw, number)
-        if self._pending is not None and self._pending.kind == "step":
+        if self._pending is not None and self._pending.kind in FUNCTION_KINDS:
             raise ParseError(
-                f"bloco #@step {self._pending.id!r} sem definição de função",
+                f"bloco #@{self._pending.kind} {self._pending.id!r} sem definição de função",
                 self.path,
                 self._pending.line,
             )
@@ -262,7 +272,7 @@ class _Parser:
             else:
                 self.header_desc.append(text)
             return
-        if self._pending is not None and key in (STEP_ATTRS | OPTION_ATTRS):
+        if self._pending is not None and key in (STEP_ATTRS | ACTION_ATTRS | OPTION_ATTRS):
             if key in self._pending.attrs:
                 self.diag.warning(f"{ANNOTATION}{key} repetido no bloco {self._pending.id!r}", number)
             self._pending.attrs[key] = rest
@@ -296,9 +306,9 @@ class _Parser:
                 number,
             )
         if self._pending is not None:
-            if self._pending.kind == "step":
+            if self._pending.kind in FUNCTION_KINDS:
                 raise ParseError(
-                    f"bloco #@step {self._pending.id!r} sem definição de função"
+                    f"bloco #@{self._pending.kind} {self._pending.id!r} sem definição de função"
                     f" (apareceu {ANNOTATION}{kind} antes)",
                     self.path,
                     self._pending.line,
@@ -348,7 +358,7 @@ class _Parser:
         self._depth += _brace_delta(code)
         self.functions.add(name)
         block = self._pending
-        if block is not None and block.kind == "step":
+        if block is not None and block.kind in FUNCTION_KINDS:
             block.attrs["__defined__"] = name
             self.resolved_functions.add(name)
             self.blocks.append(block)
@@ -373,6 +383,7 @@ class _Parser:
         self._parse_header()
         options = self._build_options()
         steps = self._build_steps()
+        actions = self._build_actions()
         self._check_cycles(steps)
         self._check_show_if(options)
         self._check_needs_step(options, steps)
@@ -390,6 +401,7 @@ class _Parser:
             strict=self._strict,
             options=tuple(options),
             steps=tuple(steps),
+            actions=tuple(actions),
         )
         return script
 
@@ -473,6 +485,7 @@ class _Parser:
                 type=kind,
                 label=label,
                 help=help_text,
+                group=self._parse_group(block),
                 url=url,
                 show_if=self._parse_show_if(block),
                 needs_step=self._parse_needs_step(block),
@@ -544,8 +557,22 @@ class _Parser:
             multiple=multiple,
             show_if=show_if,
             needs_step=self._parse_needs_step(block),
+            group=self._parse_group(block),
             line=block.line,
         )
+
+    def _parse_group(self, block: _Block) -> str | None:
+        """§4.8.1 — ``group=`` da opção geral. Com ``needs_step`` vira aviso e é ignorado."""
+        raw = block.get("group")
+        if raw is None or not _unquote(raw.strip()):
+            return None
+        if block.get("needs_step"):
+            self.diag.warning(
+                f"group em #@option {block.id!r} ignorado: a opção fica na linha do step",
+                block.attr_line("group"),
+            )
+            return None
+        return _unquote(raw.strip())
 
     def _parse_needs_step(self, block: _Block) -> str | None:
         """``needs_step=<id>``: id do step a que a opção pertence (ou ``None``)."""
@@ -770,6 +797,56 @@ class _Parser:
                 continue
             steps.append(self._build_step(block))
         return steps
+
+    def _build_actions(self) -> list[Action]:
+        return [self._build_action(block) for block in self.blocks if block.kind == "action"]
+
+    def _build_action(self, block: _Block) -> Action:
+        """§4.8 — ação: função, título, botão, grupo, root e timeout (padrão 60 s)."""
+        function = (block.get("function") or block.id).strip()
+        defined = block.attrs.get("__defined__")
+        if function == block.id and defined is not None and defined != block.id:
+            self._error(
+                f"ação {block.id!r}: a função definida é {defined!r},"
+                " o id deve ser igual ao nome da função (ou use #@function)",
+                block.line,
+            )
+        if function not in self.functions:
+            self._error(
+                f"função {function!r} da ação {block.id!r} não encontrada no script", block.line
+            )
+        for key in ACTION_IGNORED:
+            if block.get(key) is not None:
+                self.diag.warning(
+                    f"#@{key} não vale em #@action {block.id!r}; será ignorado",
+                    block.attr_line(key),
+                )
+        timeout = 60
+        timeout_raw = block.get("timeout")
+        if timeout_raw is not None:
+            try:
+                parsed = int(timeout_raw.strip())
+            except ValueError:
+                parsed = 0
+            if parsed > 0:
+                timeout = parsed
+            else:
+                self.diag.warning(
+                    f"#@timeout {timeout_raw!r} inválido na ação {block.id!r}; usando 60 s",
+                    block.attr_line("timeout"),
+                )
+        group = _unquote(block.get("group").strip()) if block.get("group") else None
+        return Action(
+            id=block.id,
+            function=function,
+            title=_unquote((block.get("title") or block.id).strip()),
+            description="\n".join(part for part in block.descs if part),
+            button=_unquote((block.get("button") or "Executar").strip()) or "Executar",
+            group=group or None,
+            root=_flag(block.get("root"), False),
+            timeout=timeout,
+            line=block.line,
+        )
 
     def _build_step(self, block: _Block) -> Step:
         function = (block.get("function") or block.id).strip()
