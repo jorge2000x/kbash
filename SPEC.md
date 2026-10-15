@@ -921,6 +921,9 @@ está pronta quando **todos** os critérios passam.
 - [x] Guia de uso do programa (`docs/USO.md`).
 - [x] Predefinições de opções em `kbash-config/` (§9.4), com testes.
 - [x] Biblioteca da tela inicial com ícones (§10.0), e `needs_step` (§4.3).
+- [x] Ações (`#@action`, mini-scripts sob demanda com botão e saída, §4.8 e §7.6) e grupos
+      definidos pelo autor (`group=`/`#@group`, §4.8.1). Sem cartões fixos *Opções*/*Etapas* na
+      tela de Seleção (§10.2.2). Pendente: validar o layout num desktop com Kirigami.
 
 ---
 

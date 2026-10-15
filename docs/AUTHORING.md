@@ -114,12 +114,14 @@ maiúsculas) em todos os steps.
 | `filters` | Globs do seletor de arquivo. Hoje o portal abre sem filtro. |
 | `show_if` | Mostra a opção só quando outra tem certo valor: `show_if="perfil=completo"`. Várias condições com vírgula (E). |
 | `needs_step` | Liga a opção a um step: ela aparece **dentro da linha desse step**, e só enquanto o step estiver marcado. |
+| `group` | Bloco da tela onde a opção aparece, pelo título. Sem `group`, fica no bloco sem título. Ignorado em opção com `needs_step`. |
 
 ### Quando usar `needs_step`
 
 Use `needs_step` sempre que uma opção configura um step. O usuário vê a escolha
-no mesmo lugar em que decide rodar a ação. Opção sem `needs_step` fica no cartão
-*Opções*, no topo da tela.
+no mesmo lugar em que decide rodar a ação. Opção sem `needs_step` é geral e fica
+no bloco indicado por `group=`. Quem organiza a tela é você: blocos aparecem na
+ordem da primeira declaração no arquivo (§4.8.1 do SPEC).
 
 Não crie opção só para ligar ou desligar uma etapa: o checkbox do step já faz isso.
 
@@ -133,7 +135,7 @@ Não crie opção só para ligar ou desligar uma etapa: o checkbox do step já f
 
 ### Predefinições do usuário
 
-O usuário pode salvar valores das opções como predefinição (no cartão *Opções*).
+O usuário pode salvar valores das opções como predefinição (na linha *Predefinição*, no topo da tela).
 Elas ficam em `kbash-config/<id>.json`, na pasta do programa. Senhas nunca entram.
 Por isso o `#@id` precisa ficar estável depois que o script for distribuído.
 
@@ -158,7 +160,7 @@ enviar() {
 | `#@step id` | Começa o bloco. Deve ser igual ao nome da função (ou use `#@function nome`). |
 | `#@title` | Título. Padrão: o id. |
 | `#@desc` | Descrição (pode repetir a linha). |
-| `#@group` | Agrupa steps visualmente. |
+| `#@group` | Bloco da tela onde o step aparece (também vale para ações e opções com `group=`). |
 | `#@default on\|off` | Marcado por padrão. Padrão: `on`. |
 | `#@required` | Sempre marcado, não pode ser desmarcado. |
 | `#@depends a,b` | Marcar este step marca `a` e `b` junto. |
@@ -167,6 +169,47 @@ enviar() {
 | `#@on_error stop\|continue` | Se falhar: parar tudo (padrão) ou seguir para o próximo. |
 
 As anotações de step ficam em linhas seguidas, logo antes da função.
+
+## 5a. Ações (mini-scripts)
+
+Uma ação é uma função que o usuário roda **na própria tela de seleção**, por um botão,
+sem entrar no plano. Serve para medir ou checar algo antes de *Executar*.
+
+```bash
+#@action medir
+#@title Medir o que seria liberado
+#@desc Só mede. Não apaga nada.
+#@button Medir
+#@group Verificar
+#@timeout 60
+medir() {
+    local mb
+    mb=$(du -sm "$OPT_PASTA" 2>/dev/null | cut -f1) || mb=""
+    rt_log "Ocupado agora: ${mb:-desconhecido} MiB"
+}
+```
+
+| Diretiva | Para que serve |
+|---|---|
+| `#@action id` | Começa o bloco. Mesmas regras de id dos steps. |
+| `#@title`, `#@desc` | Título e descrição. |
+| `#@button` | Rótulo do botão. Padrão: *Executar*. |
+| `#@group` | Bloco da tela. |
+| `#@root true` | Pede a senha do sistema antes de rodar (seção 8). |
+| `#@timeout N` | Segundos até encerrar. Padrão: 60. |
+| `#@function nome` | Nome da função, se for diferente do id. |
+
+**O que a ação recebe.** As `OPT_*` com os valores **atuais** da tela, no clique. Por
+isso ela pode depender de opções já preenchidas. Opção oculta entra com o `default`.
+
+**O que ela devolve.** A saída de `rt_log` e do que for impresso, embaixo do botão, com
+status *Concluído*, *Falhou (código N)* ou *Tempo esgotado*. Nada disso vai para o log
+de execução nem para o resultado.
+
+**Limites.** Ação não é interativa: `rt_confirm`, `rt_input`, `rt_choice` e os outros
+helpers de entrada falham com mensagem e a ação termina como *Falhou*. Use uma etapa
+para perguntar algo. Não existe `#@default`, `#@required`, `#@depends` nem `#@on_error`
+em ação; se aparecerem, geram aviso e são ignorados.
 
 ## 6. Variáveis que o runtime define
 
@@ -239,6 +282,8 @@ Steps com `#@root true` rodam como root. O sistema mostra o diálogo de autoriza
 | `depends aponta para step inexistente` / ciclo | Dependências erradas. |
 | `choice sem choices` / `default fora de choices` | Lista de escolhas incompleta. |
 | `show_if` ou `needs_step` com referência inexistente | O id citado não existe. |
+| `#@requires` com espaços (`find awk df`) | A lista é separada por **vírgula**: `#@requires find,awk,df`. |
+| `group` em opção com `needs_step` | Aviso: a opção fica na linha do step e o grupo é ignorado. |
 | `url` ausente ou não `http`/`https` | Em `link`. |
 | atributo que não se aplica ao tipo | Aviso: por exemplo, `default` em `paragraph`. |
 | comando solto fora de função | Aviso heurístico: esse código roda a cada step. |

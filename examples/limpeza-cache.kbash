@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Exemplo do kbash: limpeza de cache com uma ação de verificação (SPEC.md §4.8).
+#
+# A ação "medir" roda na própria tela, sem entrar no plano: mede quanto espaço
+# seria liberado com a pasta e a idade que o usuário escolheu, sem apagar nada.
+# Os steps só apagam depois de *Executar*, e o do sistema pede root (pkexec).
+#
+# Valide com:
+#   kbash check examples/limpeza-cache.kbash
+#   kbash plan examples/limpeza-cache.kbash
+#
+#@runtime 1
+#@name Limpeza de cache
+#@id com.kbash.limpeza-cache
+#@description Apaga arquivos de cache antigos. Antes de limpar, mede quanto seria liberado.
+#@version 1.0.0
+#@author kbash
+#@icon edit-clear
+#@requires find,awk,df
+
+#@option pasta type=path label="Pasta de cache do usuário" default="$HOME/.cache" group="Alvo"
+#@option idade type=number label="Apagar arquivos com mais de (dias)" min=1 max=365 default=30 group="Alvo"
+
+#@action medir
+#@title Medir o que seria liberado
+#@desc Só mede, com a pasta e a idade escolhidas acima. Não apaga nada.
+#@button Medir
+#@group Verificar
+#@timeout 60
+medir() {
+    local liberavel_mb livre_mb
+    # strict mode (RT_STRICT=1): pasta inexistente faz o pipeline falhar; trata-se aqui
+    liberavel_mb=$(find "$OPT_PASTA" -type f -mtime +"$OPT_IDADE" -printf '%s\n' 2>/dev/null \
+        | awk '{ soma += $1 } END { printf "%.1f", soma / 1048576 }') || liberavel_mb=""
+    livre_mb=$(df -Pm "$OPT_PASTA" 2>/dev/null | awk 'NR == 2 { print $4 }') || livre_mb=""
+    rt_log "Espaço livre no disco de $OPT_PASTA: ${livre_mb:-desconhecido} MiB"
+    rt_log "Liberaria cerca de ${liberavel_mb:-0} MiB (arquivos com mais de $OPT_IDADE dias)"
+}
+
+#@step limpar_usuario
+#@title Limpar o cache do usuário
+#@desc Apaga na pasta escolhida os arquivos mais antigos que a idade escolhida.
+#@group Limpar
+limpar_usuario() {
+    if ! rt_confirm "Apagar arquivos com mais de $OPT_IDADE dias em $OPT_PASTA?" n; then
+        rt_log "Cancelado: nada foi apagado."
+        return 0
+    fi
+    rt_progress - "Apagando arquivos antigos..."
+    find "$OPT_PASTA" -type f -mtime +"$OPT_IDADE" -delete
+}
+
+#@step limpar_sistema
+#@title Limpar o cache do sistema
+#@desc Apaga em /var/cache os arquivos mais antigos que a idade escolhida. Pede senha de administrador.
+#@group Sistema
+#@root true
+#@default off
+limpar_sistema() {
+    rt_progress - "Apagando /var/cache antigo..."
+    find /var/cache -type f -mtime +"$OPT_IDADE" -delete
+}

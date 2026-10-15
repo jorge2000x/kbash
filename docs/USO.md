@@ -22,17 +22,19 @@ Para trocar de script enquanto a home está aberta, use *Abrir outro…*.
 
 ## 2. Escolher o que rodar
 
-A tela de seleção tem três partes:
+A tela de seleção é uma lista de **blocos**, na ordem e com os títulos que o autor
+do script definiu. Não há cartões fixos de *Opções* e *Etapas*. Dentro de um bloco
+aparecem, nesta ordem: as opções, depois as etapas, depois as ações.
 
-- **Opções.** Campos do formulário que valem para o script inteiro. Ficam no cartão
-  *Opções*. Campos obrigatórios precisam estar preenchidos antes de *Executar*.
-- **Predefinições.** Linha *Predefinição* dentro do cartão *Opções*:
+- **Predefinições.** Linha *Predefinição* no topo da tela (quando o script tem opções):
   - escolha um nome da lista para aplicar aqueles valores;
   - *Salvar como…* grava os valores atuais com o nome que você der;
   - *Apagar* remove a predefinição escolhida.
 
   As predefinições ficam numa pasta `kbash-config` ao lado do programa, em um arquivo
   por script. Senhas nunca são salvas.
+- **Opções.** Campos do bloco a que pertencem. Campos obrigatórios precisam estar
+  preenchidos antes de *Executar*.
 - **Etapas.** Lista de steps com caixa de seleção, título, descrição e selos:
   - *requer root*: a etapa pede privilégios de administrador;
   - *por dependência*: entrou sozinha porque outra etapa precisa dela;
@@ -40,6 +42,11 @@ A tela de seleção tem três partes:
 
   Marcar uma etapa marca as que ela depende. Opções ligadas a uma etapa aparecem
   **dentro da linha dela**, enquanto ela estiver marcada.
+- **Ações.** Botões com um resultado embaixo, por exemplo *Medir o que seria liberado*.
+  A ação roda na hora, com os valores que você escolheu na tela, e **não entra** no
+  plano de execução. Ela pode medir, checar ou preparar algo, e mostra a saída logo
+  abaixo do botão. Uma ação roda por vez, e não roda enquanto o plano estiver
+  executando. Ações de root também pedem a senha do sistema.
 
 *Executar* só fica disponível quando há pelo menos uma etapa marcada e as opções
 obrigatórias estão válidas.
