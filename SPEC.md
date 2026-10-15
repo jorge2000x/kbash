@@ -152,7 +152,8 @@ O repositório também guarda as ferramentas de empacotamento (`tools/`, ao lado
 | `minlen` / `maxlen` | Comprimento mínimo/máximo (`string`/`password`/`text`). |
 | `multiple` | `true` permite vários arquivos (`file`); vira lista separada por vírgula. |
 | `show_if` | Condição de visibilidade: `"outra=valor[,outra2=valor2]"` (AND). Opção oculta some do formulário, usa o `default` e pula o `required`. Vale também para `paragraph` e `link`. |
-| `needs_step` | `needs_step=<id>`: a opção pertence ao step `<id>`. Ela aparece **dentro da linha desse step** na tela de Seleção, e só enquanto o step está selecionado (contando as dependências adicionadas automaticamente). Oculta, usa o `default` e pula o `required`. Combina com `show_if` (AND). Id inexistente é erro de validação (§4.6). Opção sem `needs_step` é geral e fica no cartão *Opções*. |
+| `needs_step` | `needs_step=<id>`: a opção pertence ao step `<id>`. Ela aparece **dentro da linha desse step** na tela de Seleção, e só enquanto o step está selecionado (contando as dependências adicionadas automaticamente). Oculta, usa o `default` e pula o `required`. Combina com `show_if` (AND). Id inexistente é erro de validação (§4.6). Opção sem `needs_step` é geral e aparece no **grupo** indicado por `group` (§4.8). Em opção com `needs_step`, `group` é ignorado com aviso. |
+| `group` | Grupo de exibição da opção geral (§4.8). Sem `group`, a opção fica no bloco sem título. Não afeta `OPT_*`. |
 | `required` | `true` bloqueia "Executar" enquanto vazio. |
 | `help` | Texto de ajuda (tooltip/subtítulo). |
 
@@ -184,7 +185,7 @@ install_deps() {
 | `#@step id` | Inicia o bloco. `id` deve ser único e igual ao nome da função (ou use `function=nome`). |
 | `#@title` | Título exibido. Padrão: o `id`. |
 | `#@desc` | Descrição (uma ou mais linhas `#@desc`, concatenadas). |
-| `#@group` | Agrupa steps visualmente. |
+| `#@group` | Grupo de exibição na tela de Seleção (§4.8). Vale para steps, ações e opções (`group=`). |
 | `#@default on\|off` | Marcado por padrão? Padrão `on`. |
 | `#@required` | Step obrigatório: sempre selecionado, não pode ser desmarcado. |
 | `#@depends id1,id2` | Dependências. Marcar este step marca as dependências automaticamente. |
@@ -253,6 +254,66 @@ config_git() {
 Um exemplo que cobre todos os tipos de opção e de prompt está em `examples/all-options.sh`.
 
 ---
+
+### 4.8 Ações (mini-scripts) e grupos
+
+**Ação** é um bloco de função que o usuário roda **sob demanda**, pela própria
+tela de Seleção, sem entrar no plano de execução. Serve para checar ou preparar
+algo antes do *Executar*, por exemplo medir o espaço que uma limpeza liberaria.
+
+```bash
+#@action check_space
+#@title Ver espaço a liberar
+#@desc Mede quanto o cache ocuparia, sem apagar nada.
+#@button Verificar espaço
+#@group Limpeza
+#@timeout 60
+check_space() {
+  local mb
+  mb=$(du -sm "$HOME/.cache" 2>/dev/null | cut -f1)
+  rt_log "Cache do usuário: ${mb:-0} MiB"
+}
+```
+
+| Diretiva | Descrição |
+|---|---|
+| `#@action id` | Inicia o bloco. Mesmas regras de id de step (§4.1, §4.6). |
+| `#@title` | Título exibido. Padrão: o `id`. |
+| `#@desc` | Descrição (uma ou mais linhas). |
+| `#@button` | Rótulo do botão. Padrão: `Executar`. |
+| `#@group` | Grupo de exibição (§4.8.1). |
+| `#@root true\|false` | Ação exige root: é pedido o diálogo do sistema (§9.2), como nos steps. Padrão `false`. |
+| `#@timeout N` | Segundos até a ação ser encerrada. Padrão `60`. `0`/negativo: aviso, usa o padrão. |
+| `#@function nome` | Nome da função, se diferente do id. Mesma regra de §4.4. |
+
+Não existem `#@default`, `#@required`, `#@depends` nem `#@on_error` em ação: se aparecerem, geram aviso e são ignorados.
+
+**O que a ação recebe.** Cada ação roda com as variáveis `OPT_*` **com os valores atuais da tela** no momento do clique (§7.6). Assim ela pode depender de opções definidas antes, por exemplo um diretório escolhido numa opção geral ou um step marcado. Opções ocultas entram com o `default`.
+
+**O que a ação devolve.** A saída de `rt_log` e de `stdout`/`stderr` aparece num painel embaixo do botão. Status: `ok` (código 0), `falhou` (código diferente de 0) ou `tempo esgotado`. Nada é gravado no plano, em `RT_VAR_*` ou no log persistente (§9.3).
+
+**Limites.** Ação não é interativa: não há diálogo de confirmação, entrada ou escolha. Os helpers interativos (`rt_confirm`, `rt_input`, `rt_choice`, …) falham na hora com mensagem clara e a ação termina como `falhou`. Ação não se encadeia com steps e não altera a seleção. Só uma ação roda por vez, e nenhuma roda durante a execução do plano.
+
+#### 4.8.1 Grupos
+
+`group=` (em `#@option`, `#@step`, `#@action`) define em que bloco da tela o item aparece. Quem decide a organização é o autor do script; não existe mais um cartão fixo *Opções* ou *Etapas*.
+
+- Grupos aparecem na tela na **ordem da primeira declaração** no arquivo, entre opções, steps e ações.
+- Itens sem `group` ficam num bloco sem título, na posição em que o primeiro deles aparece.
+- **Dentro de um grupo** a ordem é fixa: opções gerais, depois etapas, depois ações. Isso é o que mantém a tela previsível; para interleavar, use grupos diferentes.
+- Opção com `needs_step` não aparece no grupo: fica dentro da linha do seu step (§4.3).
+
+```bash
+#@option dest type=path label="Pasta de destino" default="$HOME/backup" group="Destino"
+#@step backup
+#@group Backup
+...
+#@action check_space
+#@group Limpeza
+...
+```
+
+Com isso a tela mostra o bloco *Destino* (a pasta), o bloco *Backup* (o step) e o bloco *Limpeza* (a ação), nessa ordem.
 
 ## 5. Modelo de dados (`core/model.py`)
 
@@ -362,6 +423,16 @@ Progresso geral = `(steps concluídos + progresso do step atual) / total selecio
 Antes de rodar: `#@requires` (todos no PATH) e opções obrigatórias visíveis. Falhas geram erro na tela de seleção, sem iniciar nada. A checagem de `pkexec` para steps `root` só entra quando a elevação estiver ligada (§9.2).
 
 ---
+
+### 7.6 Execução de ações (§4.8)
+
+- Roda `bash --noprofile --norc -c <ACTION_COMMAND>` com `stdin` em `/dev/null`, `RT_MODE=action`, `RT_STEP_ID=<id da ação>`, `RT_STEP_FN=<função>`, `RT_IPC` vazio (sem canal interativo) e `RT_SCRIPT`/`RT_HELPERS`/`RT_ASSETS`/`RT_WORKDIR` como no §7.2.
+- `OPT_*` vêm de `planner.option_visible` com a seleção atual: opções ocultas usam o `default`. Não há `RT_VAR_*` (variáveis de steps não existem fora do plano).
+- `cwd` = `$HOME`, com a mesma regra de fallback do §7.1.
+- Com `#@root true`, o comando passa por `default_root_command` (§9.2). O pedido de autorização é feito uma vez antes de cada clique em ação com root.
+- `timeout` encerra o grupo de processos (SIGTERM e depois SIGKILL, §7.4) e marca `tempo esgotado`.
+- A saída é limitada às últimas 200 linhas.
+- Ação nunca gera `RunResult`, nunca entra no plano e nunca altera o `RunState`.
 
 ## 8. Protocolo de interação script ↔ runtime
 
@@ -668,7 +739,7 @@ runtime genérico, que abre sempre na home.
 
 1. **Boas-vindas** — ícone, nome, descrição, versão, autor; botão *Começar*. Sem
    script (home, §10.0), a mesma tela mostra a zona de arrastar e o seletor do portal.
-2. **Seleção** — cartão *Opções* com as opções gerais (sem `needs_step`), e lista de steps agrupados, com checkbox, título, descrição e selos ("requer root", "por dependência", "obrigatório"). Cada linha de step mostra **abaixo dele** as opções com `needs_step` igual ao seu id, enquanto o step estiver marcado; ao desmarcar, elas somem. Widget por `type` em todos os lugares. `paragraph` aparece como texto e `link` como botão, sem linha `OPT_*`. Botão *Executar* desabilitado até opções visíveis e obrigatórias válidas. A troca de seleção reavalia a visibilidade na hora.
+2. **Seleção** — uma única lista de **grupos** (§4.8.1), sem cartões fixos *Opções* e *Etapas*. Cada grupo mostra, nesta ordem: opções gerais (`group=`), depois etapas (com checkbox, título, descrição e selos "requer root", "por dependência", "obrigatório") e depois ações (botão, descrição e painel de resultado). Cada linha de step mostra **abaixo dele** as opções com `needs_step` igual ao seu id, enquanto o step estiver marcado; ao desmarcar, elas somem. Widget por `type` em todos os lugares. `paragraph` aparece como texto e `link` como botão, sem linha `OPT_*`. Uma linha de *Predefinição* (§9.4) fica no topo quando há opções. Botão *Executar* desabilitado até opções visíveis e obrigatórias válidas. A troca de seleção reavalia a visibilidade na hora. Um script sem `group` tem uma única lista sem título, no mesmo lugar.
 3. **Execução** — lista de steps com ícone de estado e duração; barra de progresso geral e do step; painel de log monoespaçado (stderr destacado, auto-scroll pausável, copiar); botão *Cancelar*. Prompts aparecem em diálogo modal.
 4. **Resultado** — sucesso/falha/cancelado, resumo por step, *Ver log*, *Salvar log*, *Fechar* (e *Tentar novamente* os que falharam).
 
@@ -695,7 +766,8 @@ Auto-scroll pausável e *Copiar* viajam junto dentro da gaveta.
 
 ### 10.3 Modelos QML (`gui/models.py`)
 - `StepListModel` (`QAbstractListModel`): roles `stepId, title, description, group, checked, locked, status, root, duration, required, autoAdded, reason, statusLabel`.
-- `OptionModel`: roles `optId, type, label, value, choices, required, error, help, default, minimum, maximum, step, filters, pattern, minlen, maxlen, multiple, visible, url`. Inclui `paragraph`/`link` (sem valor; o QML escolhe o widget pelo `type`).
+- `OptionModel`: roles `optId, type, label, value, choices, required, error, help, default, minimum, maximum, step, filters, pattern, minlen, maxlen, multiple, visible, url, group, owner`.
+- Grupos (§4.8.1): `bridge.groupBlocks` é uma lista de blocos `{name, options, steps, actions}`; `options` e `steps` são proxies (`QSortFilterProxyModel`) sobre os modelos acima filtrados por `group`, para que cada linha de step exista uma única vez na tela. `actions` é uma lista de dicts com `running`, `status` e `output`. Inclui `paragraph`/`link` (sem valor; o QML escolhe o widget pelo `type`).
 - `LogModel`: buffer circular (máx. ~20 mil linhas) com **atualização em lote a cada ~50 ms** para a GUI não travar com saída volumosa.
 - `SelectedStepsProxy` (`QSortFilterProxyModel` sobre o `StepListModel`): execução e resultado listam só as etapas selecionadas (`checked`).
 
