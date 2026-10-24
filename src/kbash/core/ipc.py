@@ -82,10 +82,36 @@ def unescape_value(value: str) -> str:
     return "".join(out)
 
 
+#: §8.3 — tamanho máximo da linha de resposta, sem a quebra de linha.
+MAX_RESPONSE_LINE = 4000
+
+
+def _fit_escaped(value: str, budget: int) -> str:
+    """Maior prefixo de ``value`` cujo texto escapado cabe em ``budget``.
+
+    O corte é feito no valor **cru**. Cortar o escapado no meio de ``\\n`` deixaria
+    só a barra invertida, e o script leria outro conteúdo (contrato na invariante
+    "truncamento preserva prefixo", INVARIANTS.md).
+    """
+    used = 0
+    end = 0
+    for index, char in enumerate(value):
+        size = len(escape_value(char))
+        if used + size > budget:
+            break
+        used += size
+        end = index + 1
+    return value[:end]
+
+
 def encode_response(request_id: str, status: str, value: str) -> bytes:
     """§8.3 — ``<id>\\t<status>\\t<valor>`` + quebra de linha."""
-    line = f"{request_id}\t{status}\t{escape_value(value)}"
-    return (line[:4000] + "\n").encode("utf-8")
+    head = f"{request_id}\t{status}\t"
+    escaped = escape_value(value)
+    budget = MAX_RESPONSE_LINE - len(head)
+    if len(escaped) > budget:
+        escaped = escape_value(_fit_escaped(value, budget))
+    return (head + escaped + "\n").encode("utf-8")
 
 
 def decode_response(raw: bytes | str) -> tuple[str, str, str]:
