@@ -12,6 +12,7 @@ import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .contratos import ensure
 from .errors import Diagnostics, ParseError, ValidationError
 from .model import (
     ON_ERROR_VALUES,
@@ -1000,6 +1001,17 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+@ensure(
+    lambda result: len({o.id for o in result.script.options} | {s.id for s in result.script.steps}
+                       | {a.id for a in result.script.actions})
+    == len(result.script.options) + len(result.script.steps) + len(result.script.actions),
+    "ids de opções, steps e ações são únicos entre si (§4.6)",
+)
+@ensure(
+    lambda result: all(s.timeout is None or s.timeout > 0 for s in result.script.steps)
+    and all(a.timeout > 0 for a in result.script.actions),
+    "timeout é nulo ou positivo",
+)
 def parse_text(text: str, path: Path | None = None) -> ParseResult:
     """Parseia o conteúdo de um script (sem tocar no disco além do nome)."""
     if text.startswith("#!"):

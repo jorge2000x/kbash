@@ -7,6 +7,7 @@ import re
 from collections.abc import Collection
 from dataclasses import dataclass, field
 
+from .contratos import ensure
 from .errors import ValidationError
 from .model import Option, RunPlan, Script, Step, is_valid_date, is_valid_number, is_valid_time
 
@@ -47,6 +48,26 @@ def _order_index(script: Script) -> dict[str, int]:
     return {step.id: number for number, step in enumerate(script.steps)}
 
 
+@ensure(
+    lambda script, result: set(result.ids) <= {step.id for step in script.steps},
+    "resolve só devolve steps que existem",
+)
+@ensure(
+    lambda script, result: all(
+        set(step.depends) <= set(result.ids)
+        for step in script.steps
+        if step.id in set(result.ids)
+    ),
+    "o fecho é fechado: toda dependência de um step escolhido também está",
+)
+@ensure(
+    lambda script, result: all(
+        result.ids.index(dep) < result.ids.index(step_id)
+        for step_id in result.ids
+        for dep in next(s.depends for s in script.steps if s.id == step_id)
+    ),
+    "a ordem respeita as dependências",
+)
 def resolve(script: Script, selected_ids: list[str] | None = None) -> Resolution:
     """§6: adiciona dependências transitivas e ``required``, ordena topologicamente.
 

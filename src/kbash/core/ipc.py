@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .contratos import ensure
 from .errors import KbashError
 from .events import EventSink, LogLine, Notify, Progress, ProgressWin, PromptRequest
 
@@ -104,6 +105,10 @@ def _fit_escaped(value: str, budget: int) -> str:
     return value[:end]
 
 
+@ensure(
+    lambda result: result.endswith(b"\n") and result.count(b"\n") == 1,
+    "a resposta é exatamente uma linha (§8.3)",
+)
 def encode_response(request_id: str, status: str, value: str) -> bytes:
     """§8.3 — ``<id>\\t<status>\\t<valor>`` + quebra de linha."""
     head = f"{request_id}\t{status}\t"

@@ -18,6 +18,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from .contratos import ensure
 from .executor import (
     GRACE_PERIOD,
     PRIVILEGE_ELEVATION,
@@ -47,6 +48,12 @@ class ActionResult:
     duration: float = 0.0
 
 
+@ensure(
+    lambda script, result: all(
+        f"OPT_{o.id.upper()}" in result for o in script.options if o.carries_value
+    ),
+    "toda opção com valor tem OPT_* no ambiente (§7.6)",
+)
 def action_env(
     script: Script,
     values: dict[str, str],
@@ -102,6 +109,18 @@ def _tail(text: str) -> str:
     return "\n".join(deque(text.splitlines(), maxlen=OUTPUT_LINES))
 
 
+@ensure(
+    lambda result: result.status in ("ok", "failed", "timeout", "error"),
+    "status de ação é um dos quatro valores (§4.8)",
+)
+@ensure(
+    lambda result: result.status != "ok" or result.exit_code == 0,
+    "ok só com código de saída 0",
+)
+@ensure(
+    lambda result: len(result.output.splitlines()) <= OUTPUT_LINES,
+    "a saída devolvida tem no máximo OUTPUT_LINES linhas",
+)
 def run_action(
     script: Script,
     action: Action,
