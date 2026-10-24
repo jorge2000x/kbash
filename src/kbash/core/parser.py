@@ -1013,7 +1013,11 @@ def _read_text(path: Path) -> str:
     "timeout é nulo ou positivo",
 )
 def parse_text(text: str, path: Path | None = None) -> ParseResult:
-    """Parseia o conteúdo de um script (sem tocar no disco além do nome)."""
+    """Parseia o conteúdo de um script (sem tocar no disco além do nome).
+
+    :raises ParseError: sintaxe ou diretiva inválida, com linha (§4.6).
+    :raises ValidationError: referência inexistente, id duplicado, ciclo etc. (§4.6).
+    """
     if text.startswith("#!"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
     parser = _Parser(text, path)

@@ -7,7 +7,7 @@ import re
 from collections.abc import Collection
 from dataclasses import dataclass, field
 
-from .contratos import ensure
+from .contratos import ensure, require
 from .errors import ValidationError
 from .model import Option, RunPlan, Script, Step, is_valid_date, is_valid_number, is_valid_time
 
@@ -48,6 +48,29 @@ def _order_index(script: Script) -> dict[str, int]:
     return {step.id: number for number, step in enumerate(script.steps)}
 
 
+def _bem_formado(script: Script) -> bool:
+    """Pré-condição de resolve: o que o parser garante (§4.6). Ids únicos, dependências
+    existentes e sem ciclo. Script fora disso não é entrada válida do planner."""
+    ids = [step.id for step in script.steps]
+    if len(set(ids)) != len(ids):
+        return False
+    grafo = {step.id: set(step.depends) for step in script.steps}
+    if any(dep not in grafo for deps in grafo.values() for dep in deps):
+        return False
+    # Kahn: se sobra alguém sem dependências pendentes, há ciclo
+    pendentes = {k: set(v) for k, v in grafo.items()}
+    while pendentes:
+        prontos = [k for k, deps in pendentes.items() if not deps]
+        if not prontos:
+            return False
+        for k in prontos:
+            del pendentes[k]
+        for deps in pendentes.values():
+            deps.difference_update(prontos)
+    return True
+
+
+@require(_bem_formado, "script parseado: ids únicos, dependências existentes e sem ciclo (§4.6)")
 @ensure(
     lambda script, result: set(result.ids) <= {step.id for step in script.steps},
     "resolve só devolve steps que existem",
@@ -72,6 +95,9 @@ def resolve(script: Script, selected_ids: list[str] | None = None) -> Resolution
     """§6: adiciona dependências transitivas e ``required``, ordena topologicamente.
 
     Empates na ordenação são desfeitos pela ordem de declaração dos steps.
+
+    :raises ValidationError: seleção com step inexistente, dependência inexistente
+        ou ciclo. O parser já impede os dois últimos (§4.6); aqui é defesa.
     """
     by_id = _index(script)
     order = _order_index(script)
