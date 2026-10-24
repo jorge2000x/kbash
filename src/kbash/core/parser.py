@@ -253,7 +253,8 @@ class _Parser:
 
     def _handle_annotation(self, raw: str, number: int) -> None:
         body = raw.lstrip()[len(ANNOTATION):]
-        if not body:
+        # corpo só com espaço (inclusive \xa0) também é vazio: split() daria lista vazia
+        if not body.strip():
             self.diag.warning("anotação vazia", number)
             return
         parts = body.split(None, 1)
