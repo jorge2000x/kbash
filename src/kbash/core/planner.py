@@ -12,16 +12,16 @@ from .model import Option, RunPlan, Script, Step, is_valid_date, is_valid_number
 
 __all__ = [
     "Resolution",
-    "resolve",
     "build_plan",
-    "dependents",
     "can_uncheck",
-    "set_checked",
-    "default_selection",
     "default_options",
+    "default_selection",
+    "dependents",
     "expand_value",
     "option_errors",
     "option_visible",
+    "resolve",
+    "set_checked",
     "validate_options",
     "value_options",
 ]
@@ -210,12 +210,18 @@ def option_errors(
         if not value:
             continue
         if option.type in ("choice", "multi"):
-            chosen = [item.strip() for item in str(value).split(",")] if option.type == "multi" else [str(value)]
+            chosen = (
+                [item.strip() for item in str(value).split(",")]
+                if option.type == "multi"
+                else [str(value)]
+            )
             for item in chosen:
                 if item and item not in option.choices:
-                    errors[option.id] = f"valor inválido {item!r} (esperado um de: {', '.join(option.choices)})"
+                    expected = ", ".join(option.choices)
+                    errors[option.id] = f"valor inválido {item!r} (esperado um de: {expected})"
                     break
-        if option.type == "bool" and str(value).lower() not in ("0", "1", "true", "false", "on", "off", "yes", "no"):
+        booleans = ("0", "1", "true", "false", "on", "off", "yes", "no")
+        if option.type == "bool" and str(value).lower() not in booleans:
             errors[option.id] = "use 0/1 para booleano"
         if option.type in ("number", "slider"):
             if not is_valid_number(str(value)):
@@ -261,9 +267,8 @@ def option_visible(
 
     ``values`` pode não ter todas as chaves: o que falta usa o `default`.
     """
-    if option.needs_step is not None:
-        if selected is None or option.needs_step not in selected:
-            return False
+    if option.needs_step is not None and (selected is None or option.needs_step not in selected):
+        return False
     for ref_id, expected in option.show_if:
         ref = script.option(ref_id)
         if ref is None:

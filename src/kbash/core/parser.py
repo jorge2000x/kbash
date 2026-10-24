@@ -30,7 +30,7 @@ from .model import (
     slugify,
 )
 
-__all__ = ["ParseResult", "parse_text", "parse_script", "check_script", "sha256_of"]
+__all__ = ["ParseResult", "check_script", "parse_script", "parse_text", "sha256_of"]
 
 ANNOTATION = "#@"
 BLOCK_START = ("step", "action", "option")
@@ -413,10 +413,13 @@ class _Parser:
         try:
             self._runtime_version = int(raw_runtime)
         except ValueError:
-            raise ParseError(f"#@runtime inválido: {raw_runtime!r}", path, self.header_lines["runtime"]) from None
+            line = self.header_lines["runtime"]
+            raise ParseError(f"#@runtime inválido: {raw_runtime!r}", path, line) from None
         if self._runtime_version < 1:
             raise ValidationError(
-                f"#@runtime deve ser >= 1 (recebido {self._runtime_version})", path, self.header_lines["runtime"]
+                f"#@runtime deve ser >= 1 (recebido {self._runtime_version})",
+                path,
+                self.header_lines["runtime"],
             )
         if self._runtime_version > RUNTIME_VERSION_SUPPORTED:
             raise ValidationError(
@@ -502,12 +505,11 @@ class _Parser:
                     f" ({', '.join(choices)})",
                     block.attr_line("default"),
                 )
-        if kind == "bool" and default is not None:
-            if default.strip().lower() not in TRUTHY | FALSY:
-                self.diag.warning(
-                    f"default={default!r} de #@option {block.id!r} (bool) não é booleano",
-                    block.attr_line("default"),
-                )
+        if kind == "bool" and default is not None and default.strip().lower() not in TRUTHY | FALSY:
+            self.diag.warning(
+                f"default={default!r} de #@option {block.id!r} (bool) não é booleano",
+                block.attr_line("default"),
+            )
         if required and kind == "bool":
             self.diag.warning(
                 f"#@option {block.id!r} é required mas do tipo bool", block.attr_line("required")
@@ -525,18 +527,16 @@ class _Parser:
             )
         if kind in ("number", "slider"):
             self._check_numeric_default(block, default, minimum, maximum)
-        if kind == "date" and default:
-            if not is_valid_date(default):
-                self._error(
-                    f"default={default!r} de #@option {block.id!r} não é data ISO (AAAA-MM-DD)",
-                    block.attr_line("default"),
-                )
-        if kind == "time" and default:
-            if not is_valid_time(default):
-                self._error(
-                    f"default={default!r} de #@option {block.id!r} não é hora (HH:MM)",
-                    block.attr_line("default"),
-                )
+        if kind == "date" and default and not is_valid_date(default):
+            self._error(
+                f"default={default!r} de #@option {block.id!r} não é data ISO (AAAA-MM-DD)",
+                block.attr_line("default"),
+            )
+        if kind == "time" and default and not is_valid_time(default):
+            self._error(
+                f"default={default!r} de #@option {block.id!r} não é hora (HH:MM)",
+                block.attr_line("default"),
+            )
         pattern, minlen, maxlen, multiple = self._parse_text_checks(block, kind, default)
         show_if = self._parse_show_if(block)
         return Option(
@@ -835,7 +835,8 @@ class _Parser:
                     f"#@timeout {timeout_raw!r} inválido na ação {block.id!r}; usando 60 s",
                     block.attr_line("timeout"),
                 )
-        group = _unquote(block.get("group").strip()) if block.get("group") else None
+        raw_group = block.get("group")
+        group = _unquote(raw_group.strip()) if raw_group else None
         return Action(
             id=block.id,
             function=function,
@@ -946,7 +947,7 @@ class _Parser:
             if state.get(node) == 2:
                 return
             if state.get(node) == 1:
-                cycle = stack[stack.index(node):] + [node]
+                cycle = [*stack[stack.index(node):], node]
                 self._error(
                     "ciclo em show_if: " + " -> ".join(cycle),
                     lines.get(stack[-1], by_id[node].line),
@@ -955,7 +956,7 @@ class _Parser:
             state[node] = 1
             for dependency in graph.get(node, ()):
                 if dependency in graph:
-                    visit(dependency, stack + [node])
+                    visit(dependency, [*stack, node])
             state[node] = 2
 
         for option in options:
@@ -984,13 +985,11 @@ class _Parser:
             if state.get(node) == 2:
                 return
             if state.get(node) == 1:
-                cycle = stack[stack.index(node):] + [node]
-                self._error(
-                    "ciclo nas dependências: " + " -> ".join(cycle), by_id[node].line
-                )
+                cycle = [*stack[stack.index(node):], node]
+                self._error("ciclo nas dependências: " + " -> ".join(cycle), by_id[node].line)
             state[node] = 1
             for dependency in graph.get(node, ()):
-                visit(dependency, stack + [node])
+                visit(dependency, [*stack, node])
             state[node] = 2
 
         for step in steps:

@@ -139,7 +139,8 @@ def run_action(
     if action.root and PRIVILEGE_ELEVATION:
         argv = root_command(argv, env, cwd)
     try:
-        process = subprocess.Popen(  # argv em lista, sem shell
+        # argv em lista e sem shell (AGENTS.md); o comando root vem do pkexec, §9.2
+        process = subprocess.Popen(  # noqa: S603
             argv,
             cwd=cwd,
             env=env,

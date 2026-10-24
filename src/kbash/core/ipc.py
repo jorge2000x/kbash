@@ -1,4 +1,4 @@
-"""Transporte de interação runtime ↔ script (SPEC.md §8.1–§8.3).
+"""Transporte de interação runtime ↔ script (SPEC.md §8.1 a §8.3).
 
 Dois FIFOs por execução, num diretório ``0700`` (§8.1):
 
@@ -26,16 +26,16 @@ from .errors import KbashError
 from .events import EventSink, LogLine, Notify, Progress, ProgressWin, PromptRequest
 
 __all__ = [
+    "CANCEL",
+    "PROMPT_KINDS",
+    "STATUS_CANCEL",
+    "STATUS_OK",
     "IpcChannel",
     "IpcError",
-    "CANCEL",
+    "decode_response",
+    "encode_response",
     "escape_value",
     "unescape_value",
-    "encode_response",
-    "decode_response",
-    "PROMPT_KINDS",
-    "STATUS_OK",
-    "STATUS_CANCEL",
 ]
 
 #: Chave de variável aceita por rt_set: vira RT_VAR_<CHAVE> no ambiente (§7.2).
@@ -122,7 +122,7 @@ def format_answer(event: PromptRequest, value: Any) -> tuple[str, str]:
 # Canal
 # ---------------------------------------------------------------------------
 class _Pending:
-    __slots__ = ("event", "done")
+    __slots__ = ("done", "event")
 
     def __init__(self, event: PromptRequest) -> None:
         self.event = event
@@ -202,7 +202,7 @@ class IpcChannel:
         with contextlib.suppress(OSError):
             self._directory.rmdir()
 
-    def __enter__(self) -> "IpcChannel":
+    def __enter__(self) -> IpcChannel:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -288,7 +288,7 @@ class IpcChannel:
             return
         try:
             self._dispatch_message(message)
-        except Exception as exc:  # noqa: BLE001 — o leitor não pode morrer
+        except Exception as exc:
             self._emit(LogLine(self.step_id or None, "kbash",
                                f"mensagem IPC malformada ignorada: {exc}", "warn"))
             request_id = str(message.get("id", ""))

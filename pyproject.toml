@@ -13,8 +13,16 @@ dependencies = []
 
 [project.optional-dependencies]
 gui = []
-dev = ["pytest>=7"]
-
+# verificação do core (SPEC §16): só ferramentas de dev, nenhuma em runtime
+dev = [
+    "pytest>=7",
+    "ruff",
+    "pyright",
+    "hypothesis",
+    "icontract",
+    "crosshair-tool",
+    "mutmut",
+]
 [project.scripts]
 kbash = "kbash.main:main"
 
@@ -25,3 +33,24 @@ packages = ["src/kbash"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 filterwarnings = ["error::DeprecationWarning:kbash.*"]
+
+[tool.ruff]
+line-length = 110  # estilo já usado no código; SPEC §16.3
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "S", "UP", "SIM", "RUF"]
+
+[tool.pyright]
+# SPEC §16.3: basic agora; sobe para strict pasta por pasta.
+# Escopo: o core (Python puro). gui/ depende de PySide e fica fora do portão.
+typeCheckingMode = "basic"
+include = ["src/kbash/core"]
+
+# SPEC §16.3/§16.4: mutação só nos módulos críticos.
+[tool.mutmut]
+paths_to_mutate = [
+    "src/kbash/core/parser.py",
+    "src/kbash/core/planner.py",
+    "src/kbash/core/ipc.py",
+    "src/kbash/core/actions.py",
+]
