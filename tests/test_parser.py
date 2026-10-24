@@ -425,3 +425,12 @@ def test_option_show_if_errors() -> None:
     with pytest.raises(ValidationError) as error:
         parse(cycled)
     assert "ciclo" in str(error.value)
+
+
+@pytest.mark.parametrize("linha", ["#@ ", "#@   ", "#@\xa0", "#@\t"])
+def test_anotacao_so_com_espaco_e_erro_de_parse_nao_crash(linha: str) -> None:
+    """Regressão (crosshair): ``#@`` seguido só de espaço causava IndexError em
+    ``parts[0]``. Tem de virar aviso ("anotação vazia"), não exceção nua."""
+    texto = "#!/usr/bin/env bash\n#@runtime 1\n#@name X\n" + linha + "\n"
+    result = parse_text(texto)
+    assert any("anotação vazia" in str(w) for w in result.warnings)
