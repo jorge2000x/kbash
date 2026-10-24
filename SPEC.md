@@ -73,6 +73,7 @@ kbash/                       # pacote do runtime (o repositório pode ter mais p
 │   │   ├── parser.py            # extrai anotações (estático, não executa nada)
 │   │   ├── planner.py           # seleção, dependências, valores e validação de opções
 │   │   ├── executor.py          # roda steps em subprocessos bash
+│   │   ├── actions.py           # ações (§4.8): mini-scripts sob demanda, fora do plano
 │   │   ├── ipc.py               # FIFOs + protocolo de mensagens
 │   │   ├── events.py            # eventos emitidos pelo executor
 │   │   ├── ui.py                # Prompt/Answer e provedores terminal/yes/none
@@ -329,6 +330,8 @@ class Option:
     multiple: bool = False
     url: str = ""                     # só type=link
     show_if: tuple[tuple[str, str], ...] = ()
+    needs_step: str | None = None    # §4.3: opção ligada a um step
+    group: str | None = None         # §4.8.1: bloco da tela (opção geral)
     line: int = 0
     @property
     def carries_value(self) -> bool:  # False para paragraph/link (§4.3)
@@ -349,6 +352,15 @@ class Script:
     description: str; version: str; author: str; icon: str | None
     requires: tuple[str, ...]; strict: bool
     options: tuple[Option, ...]; steps: tuple[Step, ...]
+    actions: tuple[Action, ...] = ()  # §4.8
+    # groups: §4.8.1 — ordem de declaração dos blocos; "" = bloco sem título
+
+@dataclass(frozen=True)
+class Action:                        # §4.8 — mini-script sob demanda
+    id: str; function: str; title: str; description: str
+    button: str = "Executar"; group: str | None = None
+    root: bool = False; timeout: int = 60   # segundos
+    line: int = 0
 
 @dataclass
 class RunPlan:
@@ -927,16 +939,27 @@ está pronta quando **todos** os critérios passam.
 
 ---
 
-## 14. Convenções para desenvolvimento com IA (conteúdo base do `AGENTS.md`)
+## 14. Convenções para desenvolvimento com IA
+
+Fontes: este bloco, `AGENTS.md` (regras do repositório) e `CLAUDE.md` (regras de
+verificação, §16). Em caso de conflito, vale a regra mais restritiva.
 
 - Leia `SPEC.md` antes de qualquer tarefa; cite a seção que está implementando.
 - Faça **uma fase (ou sub-tarefa) por vez**. Não altere código fora do escopo pedido.
 - `core/` nunca importa Qt. Type hints em todo código novo. Python ≥ 3.11.
-- Escreva testes junto com o código; rode `pytest` antes de dar a tarefa por concluída.
+- Função pública nova no `core/`: type hints completos **e** pelo menos um contrato
+  (`icontract`) ou uma propriedade (Hypothesis) (§16.3).
+- Escreva testes junto com o código; rode o gate (§16.4) antes de dar a tarefa por concluída.
+- **Testes e `INVARIANTS.md` não entram no mesmo commit que `src/`.** Um teste que
+  falha antes da implementação entra num commit próprio, mostrado falhando.
+- Proibido: `# type: ignore` sem código de erro e motivo; `except Exception: pass`;
+  reduzir `max_examples`; remover `assert` para fazer passar.
 - Nunca use `shell=True`; monte argumentos como lista.
-- Não adicione dependências sem justificar; `rt.sh` deve continuar em bash puro.
+- Não adicione dependências sem justificar. Ferramentas de verificação ficam em
+  `[project.optional-dependencies].dev`; `rt.sh` continua em bash puro.
 - Se o spec estiver ambíguo ou errado, **pare e proponha a mudança no spec** em vez de improvisar.
 - Commits pequenos, um por etapa funcional, com mensagem descrevendo a seção do spec atendida.
+- Regra de ouro (§16.6): **humano aprova a spec; a máquina verifica; a IA implementa.**
 
 ---
 
@@ -949,3 +972,82 @@ está pronta quando **todos** os critérios passam.
 5. Internacionalização de títulos/descrições (`#@title[pt_BR]`).
 6. Formato de bundle sem AppImage (§11.2) — só se houver um caso de uso que o AppImage não atenda.
 7. Validar a fachada e o bundle num desktop KDE real (Fase 4), e decidir se `org.kde.desktop` vale o custo extra no lugar do Breeze QQC2 (ver `docs/BREEZE.md`, contraste dos controles).
+
+---
+
+## 16. Verificação formal leve (portão do `core/`)
+
+Objetivo: transformar as invariantes do `core/` em coisas que a máquina checa a
+cada mudança. Não é prova matemática completa; é uma cadeia de checagens baratas
+que pegam a maioria dos bugs de lógica, e uma cadeia mais cara só para o núcleo.
+
+### 16.1 Escopo
+
+- **Módulos críticos:** `core/parser.py`, `core/planner.py`, `core/ipc.py`,
+  `core/actions.py`. Só eles recebem propriedades, contratos e mutação.
+- **Projeto legado:** o portão roda nos arquivos alterados e nos críticos. Ampliar
+  para o resto do `core/` conforme cada módulo for tocado.
+- `gui/` e `rt.sh` ficam fora deste portão (o Qt não é testável sem display, §3).
+
+### 16.2 Invariantes
+
+`INVARIANTS.md` lista as invariantes em português simples, uma por linha. Cada uma
+aponta para o teste ou contrato que a verifica, entre colchetes, por exemplo
+`[tests/test_props_planner.py::test_resolve_fecha_dependencias]`. Invariante sem
+verificação é marcada como `[pendente]`.
+
+### 16.3 Ferramentas e níveis
+
+| Nível | Ferramenta | O que checa |
+|---|---|---|
+| Estático | `ruff` (E, F, B, S, UP, SIM, RUF) | Estilo, segurança básica, erros comuns. |
+| Estático | `pyright` em `basic` | Tipos. Sobe para `strict` pasta por pasta. |
+| Propriedade | `hypothesis` | Roundtrip (`decode(encode(x)) == x`), idempotência, "nunca levanta" (só as exceções de domínio do §4.6/§6), oráculo ingênuo (ex.: fecho de dependências por força bruta). |
+| Contrato | `icontract` | Pré e pós-condições em funções centrais (ex.: `resolve` devolve um fecho fechado e ordenado; `parse_text` só levanta `ParseError`/`ValidationError`). |
+| Simbólico | `crosshair check core/` | Procura contraexemplos dos contratos com execução simbólica, com tempo limitado por condição. |
+| Teste de testes | `mutmut` nos módulos críticos | Mutante que sobrevive = teste fraco. |
+
+`pydantic` não entra agora: o parser já é a fronteira de arquivo e devolve
+diagnósticos com linha (§4.6). Entra quando houver uma fronteira nova (API, JSON de
+predefinições lido de fora).
+
+### 16.4 Portão único
+
+`tools/verificar.sh` executa, nesta ordem, parando no primeiro erro:
+
+```
+ruff check <arquivos alterados e críticos>
+pyright <core/>
+pytest
+crosshair check <core/ críticos> --per_condition_timeout 10
+mutmut run   # nos módulos críticos; sobreviventes são falha
+```
+
+Mutantes **equivalentes** (que não mudam o comportamento observável) podem ser
+marcados com `# pragma: no mutate` no próprio código, com comentário do motivo.
+Nada além disso é aceito como exceção.
+
+### 16.5 Regras sobre os testes
+
+- Teste não é alterado para acomodar uma mudança de `src/` no mesmo commit.
+- Reduzir `max_examples`, remover asserts ou relaxar um contrato para o portão
+  passar é proibido. Se o contrato estiver errado, a mudança vai para o SPEC
+  primeiro (§14).
+- Mutante sobrevivente num módulo crítico é corrigido **antes** de a tarefa seguir.
+
+### 16.6 Papéis
+
+1. **Humano:** aprova o SPEC e as invariantes.
+2. **Máquina:** roda o portão; é a autoridade sobre "passou" ou "não passou".
+3. **IA:** propõe testes primeiro, mostra-os falhando, e só então implementa até o
+   portão passar, sem alterar os testes para isso.
+
+### 16.7 Fora de escopo por enquanto
+
+- `hypothesis.stateful`: entra se o executor ou o IPC ganhar sequência de estados
+  que precise ser modelada.
+- `atheris` (fuzzing coberto por feedback): candidato para o parser de entrada
+  externa, quando houver tempo de CI para isso.
+- Z3 ou provas formais completas: só onde um bug seria catastrófico. Hoje, nenhum
+  componente do kbash se encaixa nisso.
+
