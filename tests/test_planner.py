@@ -20,6 +20,7 @@ from kbash.core.planner import (
     option_errors,
     resolve,
     set_checked,
+    validate_options,
 )
 
 DEPS = """\
@@ -117,7 +118,7 @@ def test_expand_value() -> None:
     assert expand_value("~/dev", "/home/x") == "/home/x/dev"
     assert expand_value("~", "/home/x") == "/home/x"
     assert expand_value("${HOME}/x", "/home/x") == "/home/x/x"
-    assert expand_value("/tmp", "/home/x") == "/tmp"
+    assert expand_value("/var/x", "/home/x") == "/var/x"
 
 
 def test_default_options_expands_paths(script) -> None:
@@ -225,7 +226,8 @@ def test_file_expands_like_path() -> None:
     values = default_options(script, "/home/tester")
     assert values["avatar"] == "/home/tester/foto.png"
     plan = build_plan(
-        script, ["s"],
+        script,
+        ["s"],
         {"retries": "5", "avatar": "~/outra.png", "deadline": "2026-01-15", "alarm": "09:00"},
         home="/home/tester",
     )
@@ -286,3 +288,130 @@ def test_hidden_option_skips_required_and_uses_default() -> None:
     plan = build_plan(script, ["s"], {"modo": "a", "detalhe": "ignorado"})
     assert plan.options["detalhe"] == "padrão"
     assert "detalhe" in option_errors(script, {"modo": "b", "detalhe": ""})
+
+
+# -- mensagens exatas e ramos de cada tipo (mata sobreviventes do mutmut) ----
+TIPOS_MSG = """\
+#@runtime 1
+#@name Tipos
+#@option modo type=choice label=M choices="a,b" default=a
+#@option lista type=multi label=L choices="x,y,z" default=x
+#@option flag type=bool label=F default=0
+#@option num type=number label=N min=1 max=5 default=2
+#@option sl type=slider label=S min=0 max=10 default=5
+#@option dt type=date label=D default=2026-01-01
+#@option tm type=time label=T default=08:00
+#@option txt type=string label=Q pattern="^[a-z]+$" minlen=2 maxlen=4 default=ab
+#@option req type=string label=R required=true
+#@step s
+s() { :; }
+"""
+
+MOSTRA_CONDICIONAL = """\
+#@runtime 1
+#@name Mostra
+#@option modo type=choice label=M choices="a,b" default=a
+#@option dir type=path label=D show_if="modo=b" default="$HOME/x"
+#@step s
+s() { :; }
+"""
+
+
+@pytest.mark.parametrize(
+    ("values", "chave", "mensagem"),
+    [
+        ({"req": ""}, "req", "campo obrigatório"),
+        ({"req": "   "}, "req", "campo obrigatório"),
+        ({"req": "r", "modo": "c"}, "modo", "valor inválido 'c' (esperado um de: a, b)"),
+        ({"req": "r", "lista": "x, zz"}, "lista", "valor inválido 'zz' (esperado um de: x, y, z)"),
+        ({"req": "r", "flag": "talvez"}, "flag", "use 0/1 para booleano"),
+        ({"req": "r", "num": "abc"}, "num", "valor 'abc' não é número"),
+        ({"req": "r", "num": "0"}, "num", "valor '0' abaixo de min='1'"),
+        ({"req": "r", "num": "6"}, "num", "valor '6' acima de max='5'"),
+        ({"req": "r", "sl": "11"}, "sl", "valor '11' acima de max='10'"),
+        ({"req": "r", "dt": "2026-02-30"}, "dt", "data '2026-02-30' inválida (use AAAA-MM-DD)"),
+        ({"req": "r", "tm": "8:30"}, "tm", "hora '8:30' inválida (use HH:MM)"),
+        ({"req": "r", "txt": "A"}, "txt", "valor 'A' não casa com pattern"),
+        ({"req": "r", "txt": "a"}, "txt", "valor menor que minlen='2'"),
+        ({"req": "r", "txt": "abcde"}, "txt", "valor maior que maxlen='4'"),
+    ],
+)
+def test_option_errors_mensagem_exata_por_tipo(values: dict[str, str], chave: str, mensagem: str) -> None:
+    assert option_errors(parse_text(TIPOS_MSG, Path("t.sh")).script, values) == {chave: mensagem}
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"req": "r", "lista": "x,,y"},  # item vazio é ignorado
+        {"req": "r", "lista": " x , y "},  # espaços ao redor dos itens
+        {"req": "r", "flag": "ON"},  # booleano sem diferença de caixa
+        {"req": "r", "num": " 1 "},  # limite inferior e espaços
+        {"req": "r", "num": "5", "sl": "0", "txt": "ab"},  # limite superior
+    ],
+)
+def test_option_errors_aceita_valores_validos(values: dict[str, str]) -> None:
+    assert option_errors(parse_text(TIPOS_MSG, Path("t.sh")).script, values) == {}
+
+
+def test_can_uncheck_mensagens(script) -> None:
+    assert can_uncheck(script, "inexistente") == "step inexistente"
+    assert can_uncheck(script, "obrigatorio", {"obrigatorio"}) == "step obrigatório"
+    assert can_uncheck(script, "c", {"c", "a", "b"}) == "necessário para: a, b"
+    assert can_uncheck(script, "c", {"c", "a"}) == "necessário para: a"
+    assert can_uncheck(script, "c", {"c"}) is None
+
+
+def test_set_checked_transitivo_com_dependencia_ja_marcada(script) -> None:
+    # d depende de a e b; b depende de c, que já está marcado: o laço segue até a.
+    assert set_checked(script, {"c"}, "d", True) == {"c", "a", "b", "d"}
+
+
+def test_set_checked_desmarcar_ausente_nao_quebra(script) -> None:
+    assert set_checked(script, {"c"}, "a", False) == {"c"}
+
+
+def test_set_checked_erro_de_desmarcar_tem_mensagem_e_caminho(script) -> None:
+    with pytest.raises(ValidationError) as exc:
+        set_checked(script, {"c", "a"}, "c", False)
+    assert exc.value.diagnostic.message == "não é possível desmarcar 'c': necessário para: a"
+    assert exc.value.diagnostic.path == script.path
+
+
+def test_validate_options_expande_e_restaura_default_oculto() -> None:
+    script = parse_text(MOSTRA_CONDICIONAL, Path("m.sh")).script
+    assert validate_options(script, {"modo": "a", "dir": "~/ignorado"}, home="/h") == {
+        "modo": "a",
+        "dir": "/h/x",
+    }
+    assert validate_options(script, {"modo": "b", "dir": "~/y"}, home="/h") == {
+        "modo": "b",
+        "dir": "/h/y",
+    }
+
+
+def test_validate_options_mensagem_agregada_e_caminho(script) -> None:
+    with pytest.raises(ValidationError) as exc:
+        validate_options(script, {"editor": "emacs"})
+    assert exc.value.diagnostic.message == (
+        "editor: valor inválido 'emacs' (esperado um de: vim, nano); nome: campo obrigatório"
+    )
+    assert exc.value.diagnostic.path == script.path
+
+
+@pytest.mark.parametrize(
+    ("entrada", "esperado"),
+    [
+        ("~", "/h"),
+        ("~/x", "/h/x"),
+        ("~x", "~x"),
+        ("$HOME", "/h"),
+        ("$HOME/x", "/h/x"),
+        ("${HOME}/x", "/h/x"),
+        ("a/b", "a/b"),
+        ("", ""),
+        (None, ""),
+    ],
+)
+def test_expand_value_casos(entrada: str | None, esperado: str) -> None:
+    assert expand_value(entrada, home="/h") == esperado
