@@ -18,7 +18,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .contratos import ensure
+from .contratos import ensure, require
 from .executor import (
     GRACE_PERIOD,
     PRIVILEGE_ELEVATION,
@@ -48,6 +48,10 @@ class ActionResult:
     duration: float = 0.0
 
 
+@require(
+    lambda values: all(isinstance(v, str) for v in values.values()),
+    "valores da tela são texto (OptionModel.values)",
+)
 @ensure(
     lambda script, result: all(
         f"OPT_{o.id.upper()}" in result for o in script.options if o.carries_value
