@@ -1003,9 +1003,9 @@ verificação é marcada como `[pendente]`.
 | Estático | `ruff` (E, F, B, S, UP, SIM, RUF) | Estilo, segurança básica, erros comuns. |
 | Estático | `pyright` em `basic` | Tipos. Sobe para `strict` pasta por pasta. |
 | Propriedade | `hypothesis` | Roundtrip (`decode(encode(x)) == x`), idempotência, "nunca levanta" (só as exceções de domínio do §4.6/§6), oráculo ingênuo (ex.: fecho de dependências por força bruta). |
-| Contrato | `icontract` | Pré e pós-condições em funções centrais (ex.: `resolve` devolve um fecho fechado e ordenado; `parse_text` só levanta `ParseError`/`ValidationError`). |
-| Simbólico | `crosshair check core/` | Procura contraexemplos dos contratos com execução simbólica, com tempo limitado por condição. |
-| Teste de testes | `mutmut` nos módulos críticos | Mutante que sobrevive = teste fraco. |
+| Contrato | `icontract`, via `core/contratos.py` | Pré e pós-condições em funções centrais (`resolve`, `parse_text`, `encode_response`, `action_env`, `run_action`). `icontract` é dev-only: sem ela, o AppImage recebe decoradores no-op e nenhuma dependência nova. Exceções de domínio são declaradas com `:raises:` no docstring, para o crosshair não as tratar como bug. |
+| Simbólico | `crosshair check` nas funções puras listadas em `tools/verificar.sh` | Procura contraexemplos dos contratos com execução simbólica, com tempo limitado. `run_action` fica de fora: executa subprocesso, e o crosshair recusa efeito colateral. Achado sem prova: "sem contraexemplo" só vale dentro do orçamento de tempo. |
+| Teste de testes | `mutmut` nos módulos críticos | Mutante que sobrevive = teste fraco. Conta como falha o status `survived` e `no tests` (nenhum teste cobre a linha). |
 
 `pydantic` não entra agora: o parser já é a fronteira de arquivo e devolve
 diagnósticos com linha (§4.6). Entra quando houver uma fronteira nova (API, JSON de
@@ -1027,6 +1027,12 @@ Mutantes **equivalentes** (que não mudam o comportamento observável) podem ser
 marcados com `# pragma: no mutate` no próprio código, com comentário do motivo.
 Nada além disso é aceito como exceção.
 
+O mutmut guarda o resultado em `.mutmut-cache` e só roda de novo os mutantes que
+mudaram. No CI, esse cache é guardado entre execuções, para que a verificação
+completa não seja refeita a cada push (leva dezenas de minutos).
+
+Workflow: `.github/workflows/verificacao.yml`, em Python 3.11 (a versão do AppImage).
+
 ### 16.5 Regras sobre os testes
 
 - Teste não é alterado para acomodar uma mudança de `src/` no mesmo commit.
@@ -1042,7 +1048,14 @@ Nada além disso é aceito como exceção.
 3. **IA:** propõe testes primeiro, mostra-os falhando, e só então implementa até o
    portão passar, sem alterar os testes para isso.
 
-### 16.7 Fora de escopo por enquanto
+### 16.7 Dívida conhecida
+
+- O portão cobre os arquivos alterados e os críticos. O resto do `core/` tem avisos
+  do ruff (sobretudo E501 e SIM102) e ainda não passa no lint completo.
+- `pyright` está só no `core/`, em modo `basic`. `gui/` depende de PySide e fica fora.
+- Crosshair e mutmut dão evidência limitada por tempo, não prova.
+
+### 16.8 Fora de escopo por enquanto
 
 - `hypothesis.stateful`: entra se o executor ou o IPC ganhar sequência de estados
   que precise ser modelada.

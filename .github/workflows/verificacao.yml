@@ -1,0 +1,43 @@
+name: Verificação
+
+# Portão do core (SPEC.md §16.4): ruff, pyright, pytest, crosshair e mutmut.
+# Roda em todo push e PR. Não precisa de display nem de Kirigami.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Portão do core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # o gate compara com origin/main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # mesma versão do AppImage (§11.1)
+
+      - name: Dependências de verificação
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Portão (tools/verificar.sh)
+        env:
+          PYTHON: python
+          BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        run: tools/verificar.sh
+
+      - name: Mutantes sobreviventes (relatório, mesmo se falhar)
+        if: always()
+        run: |
+          python -m mutmut results || true
+          python -m mutmut export-cicd-stats || true

@@ -52,9 +52,26 @@ include = ["src/kbash/core"]
 
 # SPEC §16.3/§16.4: mutação só nos módulos críticos.
 [tool.mutmut]
+# o mutmut copia só os módulos mutados; o resto do pacote e os testes vão junto
+also_copy = ["src/kbash", "tests", "examples", "pyproject.toml"]
 paths_to_mutate = [
     "src/kbash/core/parser.py",
     "src/kbash/core/planner.py",
     "src/kbash/core/ipc.py",
     "src/kbash/core/actions.py",
+]
+# só os testes do core: GUI (Qt) fica fora da mutação (SPEC §16.1)
+pytest_add_cli_args_test_selection = [
+    "tests/test_planner.py",
+    "tests/test_props_planner.py",
+    "tests/test_needs_step.py",
+    "tests/test_parser.py",
+    "tests/test_props_parser.py",
+    "tests/test_ipc.py",
+    "tests/test_props_ipc.py",
+    "tests/test_core_robustness.py",
+    "tests/test_actions_run.py",
+    "tests/test_props_actions.py",
+    "tests/test_actions_and_groups.py",
+    "tests/test_display_options.py",
 ]

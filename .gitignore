@@ -10,3 +10,7 @@ dist/
 
 # predefinições do usuário (gui/presets.py): ficam na pasta do programa
 /kbash-config/
+
+# verificação (SPEC §16): cópias e cache do mutmut
+/mutants/
+.mutmut-cache
