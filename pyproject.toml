@@ -54,7 +54,7 @@ include = ["src/kbash/core"]
 [tool.mutmut]
 # o mutmut copia só os módulos mutados; o resto do pacote e os testes vão junto
 also_copy = ["src/kbash", "tests", "examples", "pyproject.toml"]
-paths_to_mutate = [
+source_paths = [
     "src/kbash/core/parser.py",
     "src/kbash/core/planner.py",
     "src/kbash/core/ipc.py",

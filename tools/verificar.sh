@@ -49,7 +49,7 @@ echo "== 4/5 crosshair (funções puras, tempo limitado por condição)"
 
 echo "== 5/5 mutmut (módulos críticos; sobrevivente é falha)"
 "$PY" -m mutmut run
-SOBREVIVENTES=$("$PY" -m mutmut results | grep -c "🙁" || true)
+SOBREVIVENTES=$("$PY" -m mutmut results | grep -cE "survived|no tests" || true)
 if [ "$SOBREVIVENTES" -ne 0 ]; then
     echo "falha: $SOBREVIVENTES mutante(s) sobreviveram. Veja: mutmut results / mutmut show <id>" >&2
     echo "Mutante equivalente? Marque com '# pragma: no mutate' e o motivo (§16.4)." >&2

@@ -30,6 +30,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
+      - name: Cache do mutmut (reaproveita mutantes já julgados)
+        uses: actions/cache@v4
+        with:
+          path: .mutmut-cache
+          key: mutmut-${{ github.ref_name }}-${{ hashFiles('src/kbash/core/**', 'tests/**', 'pyproject.toml') }}
+          restore-keys: |
+            mutmut-${{ github.ref_name }}-
+            mutmut-
+
       - name: Portão (tools/verificar.sh)
         env:
           PYTHON: python
