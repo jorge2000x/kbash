@@ -43,9 +43,9 @@ def test_action_reads_current_option_values(tmp_path: Path) -> None:
         "#@action show\n"
         "show() { echo \"dir=$OPT_DIR\"; }\n"
     )
-    result = _run(tmp_path, body, "show", values={"dir": "/tmp/valor-da-tela"})
+    result = _run(tmp_path, body, "show", values={"dir": "/valor/da/tela"})
     assert result.status == "ok"
-    assert "dir=/tmp/valor-da-tela" in result.output
+    assert "dir=/valor/da/tela" in result.output
 
 
 def test_hidden_needs_step_option_uses_default(tmp_path: Path) -> None:
@@ -154,3 +154,11 @@ def test_missing_home_falls_back_without_crashing(tmp_path: Path, monkeypatch, b
     body = "#@action oi\noi() { echo ola; }\n"
     result = _run(tmp_path, body, "oi")
     assert result.status == "ok"
+
+
+def test_error_status_when_process_cannot_start(tmp_path: Path) -> None:
+    """Status ``error``: o processo nem chega a existir (comando root inexistente)."""
+    body = "#@action raiz\n#@root true\nraiz() { :; }\n"
+    result = _run(tmp_path, body, "raiz", root_command=lambda argv, env, cwd: ["/nao/existe/bin"])
+    assert result.status == "error"
+    assert result.exit_code is None
