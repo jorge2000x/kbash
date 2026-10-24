@@ -415,3 +415,175 @@ def test_validate_options_mensagem_agregada_e_caminho(script) -> None:
 )
 def test_expand_value_casos(entrada: str | None, esperado: str) -> None:
     assert expand_value(entrada, home="/h") == esperado
+
+
+# -- ramos e fronteiras que o mutmut ainda pegava (segunda rodada) -----------
+ORDEM = """\
+#@runtime 1
+#@name Ordem
+#@option modo type=choice label=M choices="a,b" default=a
+#@option oculto type=string label=O show_if="modo=b" required=true
+#@option req type=string label=R required=true
+#@option pat type=string label=P pattern="^[a-z]+$"
+#@option tail type=string label=T required=true
+#@step s
+s() { :; }
+"""
+
+PARTES = """\
+#@runtime 1
+#@name Partes
+#@option texto type=string label=T default="~/x"
+#@option pw type=password label=P maxlen=4
+#@option tx type=text label=X minlen=2
+#@option oculto type=path label=D show_if="modo=b"
+#@option modo type=choice label=M choices="a,b" default=a
+#@step s
+s() { :; }
+"""
+
+
+def _partes():
+    return parse_text(PARTES, Path("p.sh")).script
+
+
+def _script_de_steps(*steps, options=()):
+    from kbash.core.model import Script, Step
+
+    return Script(
+        path=Path("c.sh"),
+        sha256="0" * 64,
+        runtime_version=1,
+        name="T",
+        id="t",
+        steps=tuple(Step(id=i, function=i, title=i, depends=tuple(d)) for i, d in steps),
+        options=tuple(options),
+    )
+
+
+@pytest.mark.parametrize("valor", ["0", "1", "true", "false", "on", "off", "yes", "no", "ON", "Yes"])
+def test_booleano_aceita_todos_os_valores_validos(valor: str) -> None:
+    script = parse_text(TIPOS_MSG, Path("t.sh")).script
+    assert option_errors(script, {"req": "r", "flag": valor}) == {}
+
+
+def test_booleano_recusa_outro_valor() -> None:
+    script = parse_text(TIPOS_MSG, Path("t.sh")).script
+    assert option_errors(script, {"req": "r", "flag": "2"}) == {"flag": "use 0/1 para booleano"}
+
+
+def test_maxlen_exato_e_valido() -> None:
+    script = parse_text(TIPOS_MSG, Path("t.sh")).script
+    assert option_errors(script, {"req": "r", "txt": "abcd"}) == {}
+
+
+def test_choice_recusa_valor_com_virgula() -> None:
+    script = parse_text(TIPOS_MSG, Path("t.sh")).script
+    assert option_errors(script, {"req": "r", "modo": "a,b"}) == {
+        "modo": "valor inválido 'a,b' (esperado um de: a, b)"
+    }
+
+
+def test_password_e_text_tambem_validam_tamanho() -> None:
+    script = _partes()
+    assert option_errors(script, {"pw": "abcde"}) == {"pw": "valor maior que maxlen='4'"}
+    assert option_errors(script, {"tx": "a"}) == {"tx": "valor menor que minlen='2'"}
+
+
+def test_regex_invalido_nao_reprova_o_valor() -> None:
+    # o parser recusa regex inválida; aqui o Option é montado direto para cobrir o ramo de re.error
+    from kbash.core.model import Option
+
+    opcao = Option(id="rx", type="string", label="R", pattern="[")
+    assert option_errors(_script_de_steps(("s", ()), options=(opcao,)), {"rx": "qualquer"}) == {}
+
+
+def test_ordem_de_erros_nao_para_no_primeiro() -> None:
+    script = parse_text(ORDEM, Path("o.sh")).script
+    # oculto está escondido: não pode interromper a checagem de req
+    assert option_errors(script, {"modo": "a"}) == {"req": "campo obrigatório", "tail": "campo obrigatório"}
+    # oculto visível e vazio: a checagem segue para req e tail
+    assert option_errors(script, {"modo": "b"}) == {
+        "oculto": "campo obrigatório",
+        "req": "campo obrigatório",
+        "tail": "campo obrigatório",
+    }
+    # padrão falho em pat não pode pular tail
+    errors = option_errors(script, {"modo": "a", "req": "r", "pat": "ABC", "tail": ""})
+    assert errors == {"pat": "valor 'ABC' não casa com pattern", "tail": "campo obrigatório"}
+
+
+def test_option_visible_com_referencia_desconhecida_e_oculta() -> None:
+    from kbash.core.model import Option
+    from kbash.core.planner import option_visible
+
+    script = _script_de_steps(("s", ()))
+    opcao = Option(id="x", type="string", label="X", show_if=(("fantasma", "y"),))
+    assert option_visible(script, {}, opcao) is False
+
+
+def test_validate_options_nao_expande_texto_comum() -> None:
+    script = _partes()
+    assert validate_options(script, {"texto": "~/x", "modo": "a"}, home="/h")["texto"] == "~/x"
+
+
+def test_validate_options_valor_ausente_vira_vazio() -> None:
+    script = _partes()
+    assert validate_options(script, {"modo": "a"}, home="/h")["texto"] == ""
+
+
+def test_validate_options_oculta_sem_default_vira_vazio() -> None:
+    script = _partes()
+    assert validate_options(script, {"modo": "a"}, home="/h")["oculto"] == ""
+
+
+def test_default_options_nao_expande_texto_comum() -> None:
+    assert default_options(_partes(), "/h")["texto"] == "~/x"
+
+
+def test_expand_value_sem_home_usa_o_home_real() -> None:
+    assert expand_value("~/x") == str(Path("~").expanduser()) + "/x"
+
+
+def test_can_uncheck_sem_selecao_usa_os_defaults(script) -> None:
+    # sem seleção explícita, os defaults contam; d depende de a, então também bloqueia
+    assert can_uncheck(script, "c") == "necessário para: a, b, d"
+
+
+def test_topological_recusa_ciclo_com_mensagem_e_caminho() -> None:
+    from kbash.core.planner import _topological
+
+    script = _script_de_steps(("a", ("b",)), ("b", ("a",)))
+    by_id = {s.id: s for s in script.steps}
+    with pytest.raises(ValidationError) as exc:
+        _topological(script, {"a", "b"}, by_id, {"a": 0, "b": 1})
+    assert exc.value.diagnostic.message == "ciclo nas dependências entre a, b"
+    assert exc.value.diagnostic.path == script.path
+
+
+def test_resolve_recusa_script_com_ciclo_por_contrato() -> None:
+    icontract = pytest.importorskip("icontract")
+    script = _script_de_steps(("a", ("b",)), ("b", ("a",)))
+    with pytest.raises(icontract.ViolationError):
+        resolve(script, ["a"])
+
+
+def test_resolve_recusa_ids_repetidos_e_dependencia_inexistente_por_contrato() -> None:
+    icontract = pytest.importorskip("icontract")
+    with pytest.raises(icontract.ViolationError):
+        resolve(_script_de_steps(("a", ()), ("a", ())), ["a"])
+    with pytest.raises(icontract.ViolationError):
+        resolve(_script_de_steps(("a", ("x",))), ["a"])
+
+
+def test_build_plan_erros_de_opcao_com_caminho_e_mensagem() -> None:
+    script = _partes()
+    with pytest.raises(ValidationError) as exc:
+        build_plan(script, ["s"], {"nope": "1"})
+    assert exc.value.diagnostic.message == "opção desconhecida: 'nope'"
+    assert exc.value.diagnostic.path == script.path
+
+
+def test_build_plan_plano_guarda_o_script() -> None:
+    script = _partes()
+    assert build_plan(script, ["s"]).script is script
