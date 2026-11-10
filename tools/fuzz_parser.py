@@ -46,8 +46,8 @@ VOCABULARIO = [
     "é", "\x00", "\r", "‮", "ação ", "step ", "option ", "end", "EOF",
 ]
 # Desvio conhecido de §4.6 ("todos com número de linha"): a ausência de #@runtime/#@name
-# é erro do arquivo inteiro e sai sem linha. Registrado como decisão pendente; o fuzzer
-# não conta essas mensagens como crash, mas reporta cada ocorrência no relatório.
+# é erro do arquivo inteiro e sai sem linha. Decisão pendente com o dono da spec. Enquanto
+# isso, o fuzzer não trata essas mensagens como crash e não as conta separadamente.
 DESVIO_CONHECIDO_SEM_LINHA = ("diretiva obrigatória ausente:",)
 ALFABETO = list("#@\"'{}()=,\\\n\t \r$`;&|<>:-_abcxyz0123456789é")
 
