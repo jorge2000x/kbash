@@ -16,12 +16,12 @@ from ..core.errors import KbashError
 from ..core.parser import parse_script
 
 __all__ = [
-    "launch",
-    "qml_dir",
+    "KIRIGAMI_VERSION",
+    "QML_IMPORT_NAME",
     "create_engine",
     "kirigami_available",
-    "QML_IMPORT_NAME",
-    "KIRIGAMI_VERSION",
+    "launch",
+    "qml_dir",
 ]
 
 QML_IMPORT_NAME = "kbash"
@@ -116,7 +116,6 @@ def create_engine(
 
     ``script_path=None`` abre a tela inicial (home): o usuário escolhe o script depois.
     """
-    from PySide6.QtCore import QUrl
     from PySide6.QtGui import QGuiApplication, QIcon
     from PySide6.QtQml import QQmlApplicationEngine
 
@@ -144,7 +143,7 @@ def create_engine(
     bridge = Bridge(script, assets)
     try:
         roots = _load_ui(engine, bridge, KIT)
-    except Exception as exc:  # noqa: BLE001 — qualquer falha na fachada
+    except Exception as exc:
         raise RuntimeError(f"falha ao carregar a interface: {exc}") from exc
     if not roots:
         raise RuntimeError("falha ao carregar o QML principal")

@@ -76,7 +76,7 @@ def cmd_plan(args: argparse.Namespace, out: TextIO) -> int:
     print("steps:", file=out)
     for index, step_id in enumerate(plan.selected, start=1):
         step = script.step(step_id)
-        assert step is not None
+        assert step is not None  # noqa: S101 — invariante: plan.selected vem do próprio script
         badges = []
         if step_id in plan.auto_added:
             badges.append("por dependência")
@@ -204,7 +204,10 @@ class HeadlessPrinter:
         }
         reason = f" — {event.reason}" if event.reason else ""
         code = "" if event.exit_code is None else f" (exit {event.exit_code})"
-        line = f"  {marks.get(event.status, '•')} {event.step_id}: {event.status.value} em {event.duration:.1f}s{code}{reason}"
+        marca = marks.get(event.status, "•")
+        line = (
+            f"  {marca} {event.step_id}: {event.status.value} em {event.duration:.1f}s{code}{reason}"
+        )
         print(line, file=self.err if event.status is StepState.FAILED else self.out)
 
     def _summary(self, event: RunFinished) -> None:
@@ -218,7 +221,7 @@ class HeadlessPrinter:
 
 def cmd_run_headless(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     from .core import ipc  # import tardio: o core de §7 não depende de FIFOs
-    from .core.ui import YesUi, create
+    from .core.ui import create
 
     script = parse_script(Path(args.script))
     plan = build_plan(script, _split(args.select), _parse_opts(args.opt), home=str(Path.home()))
@@ -239,7 +242,7 @@ def cmd_run_headless(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     )
     printer.executor = executor
 
-    def on_signal(number: int, frame: Any) -> None:  # noqa: ARG001
+    def on_signal(number: int, frame: Any) -> None:
         executor.cancel()
 
     previous = signal.getsignal(signal.SIGINT)

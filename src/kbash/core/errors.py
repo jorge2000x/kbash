@@ -9,13 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 __all__ = [
-    "KbashError",
     "Diagnostic",
+    "Diagnostics",
+    "KbashError",
     "ParseError",
-    "ValidationError",
     "PrecheckError",
     "RunCancelled",
-    "Diagnostics",
+    "ValidationError",
 ]
 
 
@@ -100,5 +100,5 @@ class Diagnostics:
     def __len__(self) -> int:
         return len(self.items)
 
-    def __iter__(self) -> "object":
+    def __iter__(self) -> object:
         return iter(self.items)

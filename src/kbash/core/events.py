@@ -6,24 +6,25 @@ Dataclasses puras — quem converte em sinais Qt é ``gui/bridge.py`` (§3 regra
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias
+from collections.abc import Callable
 
 from .model import RunState, StepState
 
 __all__ = [
+    "PROMPT_KINDS",
     "Event",
-    "RunStarted",
-    "StepStarted",
-    "StepFinished",
+    "EventSink",
     "LogLine",
+    "Notify",
     "Progress",
     "PromptRequest",
-    "Notify",
-    "RunFinished",
     "RequestEvent",
     "RespondFn",
-    "EventSink",
-    "PROMPT_KINDS",
+    "RunFinished",
+    "RunStarted",
+    "StepFinished",
+    "StepStarted",
 ]
 
 PROMPT_KINDS = ("confirm", "input", "choice")
@@ -70,12 +71,12 @@ class LogLine(Event):
 @dataclass(frozen=True)
 class Progress(Event):
     step_id: str | None
-    value: float | None  # 0.0–1.0; None = indeterminado
+    value: float | None  # 0.0-1.0; None = indeterminado
     text: str = ""
 
     @property
     def overall(self) -> float | None:
-        """0.0–1.0 do step, ou ``None`` se indeterminado."""
+        """0.0-1.0 do step, ou ``None`` se indeterminado."""
         return None if self.value is None else max(0.0, min(1.0, self.value))
 
 

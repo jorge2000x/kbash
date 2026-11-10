@@ -77,7 +77,7 @@ def main() -> int:
 
     # 2. rastreio de execução real
     if trace and trace.exists():
-        nomes |= {l.strip() for l in trace.read_text().splitlines() if l.strip()}
+        nomes |= {linha.strip() for linha in trace.read_text().splitlines() if linha.strip()}
 
     # fecho transitivo pelo próprio stdlib
     alcancados = set()

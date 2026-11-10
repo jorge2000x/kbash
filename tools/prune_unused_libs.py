@@ -22,7 +22,7 @@ from pathlib import Path
 
 
 def needed(elf: Path):
-    out = subprocess.run(["readelf", "-d", str(elf)],
+    out = subprocess.run(["readelf", "-d", str(elf)],  # noqa: S603, S607 — ferramenta de desenvolvimento, argv fixo
                          capture_output=True, text=True).stdout
     return re.findall(r"Shared library: \[(.*?)\]", out)
 
@@ -71,13 +71,13 @@ def main() -> int:
             if f.resolve() in alcancadas:
                 continue
             tam = f.stat().st_size
-            links = [l for l in d.glob("*.so*") if l.is_symlink() and l.resolve() == f.resolve()]
+            links = [ln for ln in d.glob("*.so*") if ln.is_symlink() and ln.resolve() == f.resolve()]
             removidas.append(f.name)
             bytes_livres += tam
             if not dry:
                 f.unlink()
-                for l in links:
-                    l.unlink()
+                for ln in links:
+                    ln.unlink()
 
     acao = "removeria" if dry else "removeu"
     print(f"prune: {acao} {len(removidas)} libs não alcançadas, {bytes_livres/1e6:.1f} MB")

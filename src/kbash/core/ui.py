@@ -25,22 +25,22 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
 __all__ = [
-    "Prompt",
+    "AUTO",
+    "CANCEL_SENTINEL",
+    "DEFAULT_UI",
+    "OK_SENTINEL",
     "Answer",
-    "Ui",
-    "TerminalUi",
-    "YesUi",
     "NoneUi",
     "OkUi",
-    "register",
+    "Prompt",
+    "TerminalUi",
+    "Ui",
+    "YesUi",
     "available",
     "create",
-    "select_name",
     "default_answer",
-    "CANCEL_SENTINEL",
-    "OK_SENTINEL",
-    "DEFAULT_UI",
-    "AUTO",
+    "register",
+    "select_name",
 ]
 
 AUTO = "auto"
@@ -84,7 +84,7 @@ class Prompt:
         return self.text or self.label
 
     @classmethod
-    def from_request(cls, event: Any) -> "Prompt":
+    def from_request(cls, event: Any) -> Prompt:
         """Constrói a partir de um :class:`~kbash.core.events.PromptRequest`."""
         default = event.default
         if isinstance(default, (list, tuple)):
@@ -113,11 +113,11 @@ class Answer:
     cancelled: bool = field(default=False, compare=False)
 
     @classmethod
-    def ok(cls, value: Any) -> "Answer":
+    def ok(cls, value: Any) -> Answer:
         return cls(status="ok", value=value)
 
     @classmethod
-    def cancel(cls) -> "Answer":
+    def cancel(cls) -> Answer:
         return cls(status="cancel", value="", cancelled=True)
 
     @property
@@ -264,7 +264,7 @@ class TerminalUi:
         hint = f" [{prompt.default}]" if prompt.default not in (None, "") else ""
         bounds = ""
         if prompt.minimum != "" or prompt.maximum != "":
-            bounds = f" ({prompt.minimum or '…'}–{prompt.maximum or '…'})"
+            bounds = f" ({prompt.minimum or '…'}-{prompt.maximum or '…'})"
         while True:
             raw = self._read(f"{prompt.label}{hint}{bounds}: ").strip()
             if not raw:

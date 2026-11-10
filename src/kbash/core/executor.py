@@ -38,16 +38,16 @@ from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
 
 __all__ = [
-    "StepResult",
-    "RunResult",
+    "GRACE_PERIOD",
+    "PRIVILEGE_ELEVATION",
+    "STEP_COMMAND",
     "Executor",
     "IpcChannel",
-    "precheck",
-    "helpers_path",
+    "RunResult",
+    "StepResult",
     "default_root_command",
-    "GRACE_PERIOD",
-    "STEP_COMMAND",
-    "PRIVILEGE_ELEVATION",
+    "helpers_path",
+    "precheck",
 ]
 
 #: §7.4 — 5 s entre SIGTERM e SIGKILL.
@@ -106,7 +106,7 @@ def pkexec_authorize() -> bool:
     """
     try:
         done = subprocess.run(  # argv fixo, sem shell
-            ["pkexec", "true"],
+            ["pkexec", "true"],  # noqa: S607 — pkexec vem do PATH do sistema, por desenho (§9.2)
             stdin=subprocess.DEVNULL,
             timeout=AUTH_TIMEOUT,
             check=False,
@@ -192,11 +192,15 @@ def precheck(
         selected = list(steps)
     if not selected:
         problems.append("nenhum step selecionado")
-    if PRIVILEGE_ELEVATION and check_root and any(step.root for step in selected):
-        if shutil.which("pkexec") is None:
-            problems.append(
-                "steps pedem privilégios de root (#@root true) mas o pkexec não está instalado"
-            )
+    if (
+        PRIVILEGE_ELEVATION
+        and check_root
+        and any(step.root for step in selected)
+        and shutil.which("pkexec") is None
+    ):
+        problems.append(
+            "steps pedem privilégios de root (#@root true) mas o pkexec não está instalado"
+        )
     return problems
 
 
@@ -272,14 +276,11 @@ class Executor:
                 raise PrecheckError("; ".join(problems))
         # §9.2 — o diálogo do sistema aparece aqui: depois da revisão do plano
         # (quem chama já mostrou a lista) e antes de qualquer step rodar.
-        if PRIVILEGE_ELEVATION and any(step.root for step in self.steps):
-            if not self.authorize():
-                raise PrecheckError(
-                    "autorização de root negada ou cancelada; nenhum step foi executado"
-                )
+        if PRIVILEGE_ELEVATION and any(step.root for step in self.steps) and not self.authorize():
+            raise PrecheckError("autorização de root negada ou cancelada; nenhum step foi executado")
         result = RunResult()
         started = time.monotonic()
-        self._tempdir = TemporaryDirectory(prefix="kbash-")  # noqa: SIM115 - limpo no finally
+        self._tempdir = TemporaryDirectory(prefix="kbash-")
         workdir = Path(self._tempdir.name)
         result.workdir = str(workdir)
         if self.ipc_factory is not None:
