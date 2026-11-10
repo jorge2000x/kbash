@@ -587,3 +587,34 @@ def test_build_plan_erros_de_opcao_com_caminho_e_mensagem() -> None:
 def test_build_plan_plano_guarda_o_script() -> None:
     script = _partes()
     assert build_plan(script, ["s"]).script is script
+
+
+LINK_E_MIN_VAZIO = """\
+#@runtime 1
+#@name Link
+#@option ajuda type=link label=A url="https://exemplo.org"
+#@option n type=number label=N min="" max="" default=1
+#@option caminho type=path label=C show_if="modo=b"
+#@option modo type=choice label=M choices="a,b" default=a
+#@step s
+s() { :; }
+"""
+
+
+def test_build_plan_link_com_valor_erro_com_caminho_e_mensagem() -> None:
+    script = parse_text(LINK_E_MIN_VAZIO, Path("l.sh")).script
+    with pytest.raises(ValidationError) as exc:
+        build_plan(script, ["s"], {"ajuda": "x"})
+    assert exc.value.diagnostic.message == "'ajuda' é só texto/link (link) e não recebe valor"
+    assert exc.value.diagnostic.path == script.path
+
+
+def test_min_e_max_vazios_nao_limitam() -> None:
+    script = parse_text(LINK_E_MIN_VAZIO, Path("l.sh")).script
+    assert option_errors(script, {"n": "-999999"}) == {}
+    assert option_errors(script, {"n": "999999"}) == {}
+
+
+def test_opcao_visivel_sem_valor_vira_vazio_no_plano() -> None:
+    script = parse_text(LINK_E_MIN_VAZIO, Path("l.sh")).script
+    assert validate_options(script, {"modo": "b"}, home="/h")["caminho"] == ""
