@@ -18,17 +18,18 @@ from kbash.core.ipc import (
     decode_response,
     encode_response,
     escape_value,
+    _fit_escaped,
     format_answer,
     unescape_value,
 )
 from kbash.core.events import PromptRequest
 
 TRICKY = [
-    "aspas \" e barra \\",
+    'aspas " e barra \\',
     "quebra\nde linha",
     "tab\taqui",
     "acentuação çãõ ü 日本語",
-    "json {\"a\": 1}",
+    'json {"a": 1}',
     "",
     "  espaços  ",
 ]
@@ -79,9 +80,7 @@ def bash(script: str, stdin: str = "", env_extra: dict[str, str] | None = None):
 
 
 def test_helper_json_escape() -> None:
-    result = bash(
-        f'source {HELPERS}; rt__escape "a\\"b\\\\c$(printf "\\t")d"'
-    )
+    result = bash(f'source {HELPERS}; rt__escape "a\\"b\\\\c$(printf "\\t")d"')
     assert result.returncode == 0
     assert result.stdout == 'a\\"b\\\\c\\td'
     assert json.loads(f'{{"t":"x","v":"{result.stdout}"}}')["v"] == 'a"b\\c\td'
@@ -90,11 +89,11 @@ def test_helper_json_escape() -> None:
 def test_helper_json_array() -> None:
     result = bash(f'source {HELPERS}; rt__json_array "a b" \'c"d\' ""')
     assert json.loads(result.stdout) == ["a b", 'c"d', ""]
-    assert json.loads(bash(f'source {HELPERS}; rt__json_array').stdout) == []
+    assert json.loads(bash(f"source {HELPERS}; rt__json_array").stdout) == []
 
 
 def test_helper_ids_are_unique() -> None:
-    result = bash(f'source {HELPERS}; rt__id; rt__id; rt__id')
+    result = bash(f"source {HELPERS}; rt__id; rt__id; rt__id")
     ids = result.stdout.split()
     assert len(set(ids)) == 3
 
@@ -132,7 +131,7 @@ def test_helper_fallback_log_and_progress() -> None:
     assert "erro" in result.stderr
     progress = bash(f'source {HELPERS}; rt_progress 50 "Baixando"')
     assert "50" in progress.stdout and "Baixando" in progress.stdout
-    dash = bash(f'source {HELPERS}; rt_progress -')
+    dash = bash(f"source {HELPERS}; rt_progress -")
     assert "progresso" in dash.stdout
 
 
@@ -157,14 +156,12 @@ def test_helper_truncates_long_text() -> None:
 def test_helper_has_no_external_dependencies() -> None:
     # §8.4 — bash puro: sem jq/python. Só testamos que não há chamadas a eles.
     body = HELPERS.read_text(encoding="utf-8")
-    code = "\n".join(
-        line for line in body.splitlines() if not line.lstrip().startswith("#")
-    )
+    code = "\n".join(line for line in body.splitlines() if not line.lstrip().startswith("#"))
     for forbidden in ("jq", "python", "perl", "node", "gawk", "awk"):
         assert forbidden not in code, forbidden
     # e funciona com um PATH mínimo
     result = subprocess.run(
-        [shutil.which("bash") or "/bin/bash", "-c", f'source {HELPERS}; rt_progress 10 ok'],
+        [shutil.which("bash") or "/bin/bash", "-c", f"source {HELPERS}; rt_progress 10 ok"],
         capture_output=True,
         text=True,
         env={"PATH": "/nonexistent", "HOME": os.environ.get("HOME", "/tmp")},
@@ -360,9 +357,7 @@ def test_progresswin_is_fire_and_forget() -> None:
         worker.join(timeout=10)
         assert not worker.is_alive(), "progresswin bloqueou o script esperando resposta"
         deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and sum(
-            isinstance(event, ProgressWin) for event in events
-        ) < 3:
+        while time.monotonic() < deadline and sum(isinstance(event, ProgressWin) for event in events) < 3:
             time.sleep(0.05)
         kinds = [event.op for event in events if isinstance(event, ProgressWin)]
         assert kinds == ["start", "update", "done"]
@@ -398,3 +393,43 @@ def test_helper_rt_get_empty_value() -> None:
     assert "got=[] rc=0" in out.stdout
     missing = bash(f'source {HELPERS}; rt_get inexistente; echo "rc=$?"', stdin="")
     assert missing.stdout.endswith("rc=1\n")
+
+
+# -- fronteiras de unescape, orçamento de _fit_escaped e decode (mutmut) -----
+def test_unescape_barra_final_fica() -> None:
+    assert unescape_value("a\\") == "a\\"
+
+
+def test_unescape_escape_desconhecido_mantem_a_barra() -> None:
+    assert unescape_value("\\q") == "\\q"
+
+
+def test_unescape_sequencias_conhecidas() -> None:
+    assert unescape_value("\\n\\t\\r\\\\") == "\n\t\r\\"
+
+
+def test_fit_escaped_respeita_o_orcamento_exato() -> None:
+    assert _fit_escaped("abc", 0) == ""
+    assert _fit_escaped("abc", 2) == "ab"
+    assert _fit_escaped("abc", 3) == "abc"
+    # "\n" ocupa 2 no escapado: com orçamento 3 cabe "a" + quebra; com 2, só "a"
+    assert _fit_escaped("a\nb", 3) == "a\n"
+    assert _fit_escaped("a\nb", 2) == "a"
+
+
+def test_decode_aceita_str_e_bytes() -> None:
+    assert decode_response("r1\tok\tvalor\n") == ("r1", "ok", "valor")
+    assert decode_response(b"r1\tok\tvalor\n") == ("r1", "ok", "valor")
+
+
+def test_decode_valor_com_tab_fica_inteiro() -> None:
+    assert decode_response("r1\tok\ta\tb") == ("r1", "ok", "a\tb")
+
+
+def test_decode_campos_faltando_viram_vazio() -> None:
+    assert decode_response("r1") == ("r1", "", "")
+    assert decode_response("r1\tok") == ("r1", "ok", "")
+
+
+def test_decode_ignora_quebra_final() -> None:
+    assert decode_response("r1\tok\tv\n") == ("r1", "ok", "v")

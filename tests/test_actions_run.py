@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
 import pytest
 
-from kbash.core.actions import ActionResult, action_env, run_action
+from kbash.core.actions import ActionResult, _cwd, _signal_group, action_env, run_action
 from kbash.core.executor import helpers_path
 from kbash.core.parser import parse_script
 
@@ -41,7 +42,7 @@ def test_action_reads_current_option_values(tmp_path: Path) -> None:
     body = (
         '#@option dir type=string label="Pasta" default=padrao\n'
         "#@action show\n"
-        "show() { echo \"dir=$OPT_DIR\"; }\n"
+        'show() { echo "dir=$OPT_DIR"; }\n'
     )
     result = _run(tmp_path, body, "show", values={"dir": "/valor/da/tela"})
     assert result.status == "ok"
@@ -52,7 +53,7 @@ def test_hidden_needs_step_option_uses_default(tmp_path: Path) -> None:
     body = (
         '#@option nivel type=string label="Nível" default=baixo needs_step=passo\n'
         "#@step passo\npasso() { :; }\n"
-        "#@action show\nshow() { echo \"nivel=$OPT_NIVEL\"; }\n"
+        '#@action show\nshow() { echo "nivel=$OPT_NIVEL"; }\n'
     )
     # o step não está selecionado: a opção está oculta e vale o default
     result = _run(tmp_path, body, "show", values={"nivel": "alto"}, selected=[])
@@ -71,8 +72,7 @@ def test_action_env_marks_mode_and_has_no_ipc(tmp_path: Path) -> None:
 def test_path_option_is_expanded_like_the_plan(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     body = (
-        '#@option dir type=path label="Pasta" default="~/x"\n'
-        "#@action show\nshow() { echo \"dir=$OPT_DIR\"; }\n"
+        '#@option dir type=path label="Pasta" default="~/x"\n#@action show\nshow() { echo "dir=$OPT_DIR"; }\n'
     )
     result = _run(tmp_path, body, "show", values={"dir": "~/destino"})
     assert f"dir={tmp_path}/destino" in result.output
@@ -102,7 +102,7 @@ def test_timeout_ends_the_action(tmp_path: Path) -> None:
 
 
 def test_stdin_is_closed_so_prompts_cannot_hang(tmp_path: Path) -> None:
-    body = "#@action le\nle() { read -r linha && echo \"leu:$linha\" || echo fechado; }\n"
+    body = '#@action le\nle() { read -r linha && echo "leu:$linha" || echo fechado; }\n'
     result = _run(tmp_path, body, "le")
     assert result.status == "ok"
     assert "fechado" in result.output
@@ -162,3 +162,37 @@ def test_error_status_when_process_cannot_start(tmp_path: Path) -> None:
     result = _run(tmp_path, body, "raiz", root_command=lambda argv, env, cwd: ["/nao/existe/bin"])
     assert result.status == "error"
     assert result.exit_code is None
+
+
+# -- _cwd e _signal_group: fallbacks e erros suprimidos (mutmut) -------------
+def test_cwd_usa_home_do_env_quando_existe(tmp_path: Path) -> None:
+    assert _cwd({"HOME": str(tmp_path)}, "") == str(tmp_path)
+
+
+def test_cwd_sem_home_no_env_usa_o_home_real() -> None:
+    assert _cwd({}, "") == str(Path.home())
+
+
+def test_cwd_ignora_chave_em_minusculas() -> None:
+    assert _cwd({"home": "/nao/existe/xyz"}, "") == str(Path.home())
+
+
+def test_cwd_home_inexistente_cai_no_workdir(tmp_path: Path) -> None:
+    assert _cwd({"HOME": "/nao/existe/xyz"}, str(tmp_path)) == str(tmp_path)
+
+
+def test_cwd_sem_home_nem_workdir_validos_usa_o_cwd() -> None:
+    assert _cwd({"HOME": "/nao/existe/xyz"}, "") == str(Path.cwd())
+    assert _cwd({"HOME": "/nao/existe/xyz"}, "/nao/existe/abc") == str(Path.cwd())
+
+
+@pytest.mark.parametrize("erro", [ProcessLookupError, PermissionError, OSError])
+def test_signal_group_suprime_erros_do_sistema(monkeypatch, erro: type[OSError]) -> None:
+    def falha(pid: int, sig: int) -> None:
+        raise erro("simulado")
+
+    class Processo:
+        pid = 123
+
+    monkeypatch.setattr(os, "killpg", falha)
+    _signal_group(Processo(), 15)  # não pode levantar
