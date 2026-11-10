@@ -8,8 +8,6 @@ import pytest
 
 pytest.importorskip("PySide6", reason="GUI exige PySide6")
 
-from PySide6.QtCore import QCoreApplication
-
 from kbash.core.parser import parse_script
 from kbash.core.planner import default_options
 from kbash.gui.models import OptionModel
@@ -24,8 +22,8 @@ SCRIPT = (
 
 
 @pytest.fixture(scope="module")
-def app():
-    return QCoreApplication.instance() or QCoreApplication([])
+def app(qt_core_app):
+    return qt_core_app
 
 
 def _rows(model: OptionModel) -> dict[str, dict[str, object]]:

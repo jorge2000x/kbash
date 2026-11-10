@@ -17,7 +17,6 @@ pytest.importorskip("PySide6", reason="GUI exige PySide6")
 from PySide6.QtCore import QCoreApplication
 
 from kbash.gui import bridge as bridge_module
-from kbash.gui.bridge import load_bridge
 from kbash.gui.models import OptionModel, StepListModel
 
 SCRIPT = (
@@ -32,14 +31,14 @@ SCRIPT = (
 
 
 @pytest.fixture(scope="module")
-def app():
-    return QCoreApplication.instance() or QCoreApplication([])
+def app(qt_core_app):
+    return qt_core_app
 
 
 def _bridge(tmp_path: Path, app, text: str = SCRIPT):
     script = tmp_path / "limpeza.kbash"
     script.write_text(text, encoding="utf-8")
-    return load_bridge(script)
+    return bridge_module.load_bridge(script)
 
 
 def _names(model) -> list[str]:

@@ -9,9 +9,7 @@ import pytest
 
 pytest.importorskip("PySide6", reason="GUI exige PySide6")
 
-from PySide6.QtCore import QCoreApplication
-
-from kbash.gui.bridge import load_bridge
+from kbash.gui import bridge as bridge_module
 
 SCRIPT = (
     "#!/usr/bin/env bash\n#@runtime 1\n#@name Backup Nuvem\n#@id backup\n"
@@ -23,8 +21,8 @@ SCRIPT = (
 
 
 @pytest.fixture(scope="module")
-def app():
-    return QCoreApplication.instance() or QCoreApplication([])
+def app(qt_core_app):
+    return qt_core_app
 
 
 @pytest.fixture
@@ -39,7 +37,7 @@ def home(tmp_path: Path, monkeypatch) -> Path:
 def _bridge(tmp_path: Path, app) -> object:
     script = tmp_path / "backup.kbash"
     script.write_text(SCRIPT, encoding="utf-8")
-    return load_bridge(script)
+    return bridge_module.load_bridge(script)
 
 
 def test_save_skips_passwords_and_writes_the_config_folder(app, tmp_path: Path, home: Path) -> None:
@@ -124,7 +122,7 @@ def test_unknown_option_ids_in_the_file_are_ignored_on_load(app, tmp_path: Path,
 def test_invalid_choice_from_a_preset_is_reported_as_an_option_error(app, tmp_path: Path, home: Path) -> None:
     script = tmp_path / "escolha.kbash"
     script.write_text(CHOICE_SCRIPT, encoding="utf-8")
-    bridge = load_bridge(script)
+    bridge = bridge_module.load_bridge(script)
     (home / "kbash-config").mkdir()
     (home / "kbash-config" / "escolha.json").write_text(
         json.dumps({"Antiga": {"perfil": "removido-da-versao-nova"}}), encoding="utf-8")
@@ -136,7 +134,7 @@ def test_invalid_choice_from_a_preset_is_reported_as_an_option_error(app, tmp_pa
 def test_unicode_name_and_spaced_script_id_round_trip(app, tmp_path: Path, home: Path) -> None:
     script = tmp_path / "x.kbash"
     script.write_text(SCRIPT.replace("#@id backup", "#@id meu backup"), encoding="utf-8")
-    bridge = load_bridge(script)
+    bridge = bridge_module.load_bridge(script)
     bridge.setOption("pasta", "/pão/açúcar")
     assert bridge.savePreset("Família — casa ✓") is True
     assert list(bridge.property("presetNames")) == ["Família — casa ✓"]
