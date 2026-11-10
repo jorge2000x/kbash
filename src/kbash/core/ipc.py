@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .contratos import ensure
+from .contratos import ensure, require
 from .errors import KbashError
 from .events import EventSink, LogLine, Notify, Progress, ProgressWin, PromptRequest
 
@@ -105,6 +105,13 @@ def _fit_escaped(value: str, budget: int) -> str:
     return value[:end]
 
 
+_SEPARADOR_DE_CAMPO = re.compile(r"[\t\n]")
+
+
+@require(
+    lambda request_id, status: not _SEPARADOR_DE_CAMPO.search(request_id + status),
+    "id e status não podem conter TAB nem quebra de linha (§8.3)",
+)
 @ensure(
     lambda result: result.endswith(b"\n") and result.count(b"\n") == 1,
     "a resposta é exatamente uma linha (§8.3)",
