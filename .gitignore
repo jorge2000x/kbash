@@ -14,3 +14,7 @@ dist/
 # verificação (SPEC §16): cópias e cache do mutmut
 /mutants/
 .mutmut-cache
+
+# artefatos das checagens extras (tools/testes-extras.sh)
+.fuzz-crashes/
+.fuzz-relatorio-*.json
