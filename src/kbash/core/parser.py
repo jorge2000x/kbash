@@ -376,7 +376,7 @@ class _Parser:
                 continue
             self.diag.warning(
                 f"comando de nível superior {head!r} roda a cada step"
-                " (mov[a]-o para dentro de uma função)",
+                " (mova-o para dentro de uma função)",
                 number,
             )
 
