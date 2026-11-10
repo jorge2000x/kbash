@@ -440,3 +440,72 @@ def test_anotacao_so_com_espaco_e_erro_de_parse_nao_crash(linha: str) -> None:
     texto = "#!/usr/bin/env bash\n#@runtime 1\n#@name X\n" + linha + "\n"
     result = parse_text(texto)
     assert any("anotação vazia" in str(w) for w in result.warnings)
+
+
+# -- diagnósticos com mensagem e linha exatas (mata mutantes de texto e de linha)
+_HDR = "#@runtime 1\n#@name T\n"
+
+ERROS_EXATOS = [
+    (_HDR + '#@option x type=string label="sem fechar\n#@step s\ns() { :; }\n', ParseError, 3,
+     "não foi possível tokenizar a anotação: No closing quotation"),
+    (_HDR + "#@step\ns() { :; }\n", ParseError, 3, "#@step sem id"),
+    (_HDR + "#@step 1x\n1x() { :; }\n", ParseError, 3,
+     "id inválido '1x' (esperado [a-z][a-z0-9_]*)"),
+    (_HDR + "#@step a\na() { :; }\n#@step a\na2() { :; }\n", ValidationError, 5,
+     "id duplicado 'a' (já declarado em #@step)"),
+    (_HDR + "#@step a\n#@option o type=string\n", ParseError, 3,
+     "bloco #@step 'a' sem definição de função (apareceu #@option antes)"),
+    (_HDR + "#@step a\n", ParseError, 3, "bloco #@step 'a' sem definição de função"),
+    (_HDR + "#@option o type=string\n#@option o type=string\n", ValidationError, 4,
+     "id duplicado 'o' (já declarado em #@option)"),
+    (_HDR + "#@step s\nvalor=1\n", ParseError, 3,
+     "#@step 's' deve ser seguido da definição da função (encontrado: 'valor=1')"),
+    ("#@name T\n#@step s\ns() { :; }\n", ParseError, None,
+     "diretiva obrigatória ausente: #@runtime"),
+    ("#@runtime 1\n#@step s\ns() { :; }\n", ParseError, None,
+     "diretiva obrigatória ausente: #@name"),
+    ("#@runtime x\n#@name T\n", ParseError, 1, "#@runtime inválido: 'x'"),
+    ("#@runtime 9\n#@name T\n", ValidationError, 1,
+     "#@runtime 9 é mais novo que a versão suportada (1)"),
+    (_HDR + "#@option p type=paragraph\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "#@option 'p' type=paragraph exige label (o texto mostrado)"),
+    (_HDR + "#@option l type=link\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "#@option 'l' type=link exige url"),
+    (_HDR + '#@option l type=link url="ftp://x"\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "url='ftp://x' de #@option 'l' precisa começar com http:// ou https://"),
+    (_HDR + '#@option o type=string show_if="abc"\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "show_if='abc' de #@option 'o' precisa ser id=valor"),
+    (_HDR + '#@option o type=string show_if="1x=2"\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "show_if referencia id inválido '1x' em #@option 'o'"),
+    (_HDR + '#@option o type=string show_if="zz=2"\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "show_if de #@option 'o' aponta para opção inexistente 'zz'"),
+]
+
+AVISOS_EXATOS = [
+    (_HDR + "#@step s extra\ns() { :; }\n", [(3, "argumento extra 'extra' ignorado em #@step")]),
+    (_HDR + "#@foo bar\n#@step s\ns() { :; }\n", [(3, "diretiva desconhecida #@foo")]),
+    (_HDR + "#@\n#@step s\ns() { :; }\n", [(3, "anotação vazia")]),
+    (_HDR + "#@step s\n#@title A\n#@title B\ns() { :; }\n",
+     [(5, "#@title repetido no bloco 's'")]),
+    (_HDR + "#@name X\n#@step s\ns() { :; }\n", [(3, "#@name repetido no cabeçalho")]),
+    (_HDR + "#@step s\n#@name X\ns() { :; }\n", [(4, "#@name não é válido em #@step")]),
+    (_HDR + "echo oi\n#@step s\ns() { :; }\n",
+     [(3, "comando de nível superior 'echo' roda a cada step (mova-o para dentro de uma função)")]),
+    (_HDR + '#@option l type=link url="https://x" default=1\n#@step s\ns() { :; }\n',
+     [(3, "default= de #@option 'l' não se aplica a type=link (ignorado)")]),
+]
+
+
+@pytest.mark.parametrize(("text", "exc_type", "line", "message"), ERROS_EXATOS)
+def test_erro_com_mensagem_e_linha_exatas(text: str, exc_type: type, line, message: str) -> None:
+    with pytest.raises(exc_type) as exc:
+        parse_text(text, Path("t.sh"))
+    assert exc.value.diagnostic.message == message
+    assert exc.value.diagnostic.line == line
+    assert exc.value.diagnostic.path == Path("t.sh")
+
+
+@pytest.mark.parametrize(("text", "esperados"), AVISOS_EXATOS)
+def test_aviso_com_linha_e_mensagem_exatas(text: str, esperados: list) -> None:
+    result = parse_text(text, Path("t.sh"))
+    assert [(w.line, w.message) for w in result.warnings] == esperados
