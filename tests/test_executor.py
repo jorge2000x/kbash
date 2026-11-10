@@ -87,7 +87,8 @@ def test_environment_variables(tmp_path: Path) -> None:
         "#@option nome type=string label=\"Nome\"\n"
         "#@step dump\n"
         "dump() {\n"
-        '  for v in RT_SCRIPT RT_HELPERS RT_ASSETS RT_IPC RT_STEP_ID RT_STEP_FN RT_STRICT RT_MODE RT_WORKDIR OPT_NOME; do\n'
+        '  for v in RT_SCRIPT RT_HELPERS RT_ASSETS RT_IPC RT_STEP_ID RT_STEP_FN RT_STRICT '
+        'RT_MODE RT_WORKDIR OPT_NOME; do\n'
         '    printf "%s=%s\\n" "$v" "${!v}"\n'
         "  done\n"
         "}\n",
@@ -422,7 +423,7 @@ def test_root_step_runs_through_root_command_after_authorization(tmp_path: Path)
     )
     calls: list[list[str]] = []
 
-    def fake_root(argv, env, cwd):  # noqa: ANN001, ANN202
+    def fake_root(argv, env, cwd):
         calls.append(list(argv))
         return list(argv)  # identidade: roda o bash sem pkexec de verdade
 
@@ -648,7 +649,7 @@ def test_popen_value_error_fails_only_that_step(tmp_path: Path, monkeypatch) -> 
         encoding="utf-8",
     )
 
-    def boom(*args, **kwargs):  # noqa: ANN002, ANN003
+    def boom(*args, **kwargs):
         raise ValueError("illegal environment variable name")
 
     monkeypatch.setattr("kbash.core.executor.subprocess.Popen", boom)

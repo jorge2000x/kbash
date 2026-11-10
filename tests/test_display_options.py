@@ -73,7 +73,14 @@ def test_link_needs_url() -> None:
 
 @pytest.mark.parametrize(
     "url",
-    ["ftp://example.org/x", "javascript:alert(1)", "file:///etc/passwd", "example.org", "https://", "https://a b.org"],
+    [
+        "ftp://example.org/x",
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+        "example.org",
+        "https://",
+        "https://a b.org",
+    ],
 )
 def test_link_refuses_other_schemes(url: str) -> None:
     with pytest.raises(ValidationError) as error:

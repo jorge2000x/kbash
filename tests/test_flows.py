@@ -1,4 +1,4 @@
-"""Fluxos de uso real, de ponta a ponta (SPEC.md §5–§8).
+"""Fluxos de uso real, de ponta a ponta (SPEC.md §5-§8).
 
 Cada teste simula uma sessão como a GUI/CLI a conduz: monta o plano com as
 opções escolhidas, roda o executor e responde os prompts IPC como um usuário

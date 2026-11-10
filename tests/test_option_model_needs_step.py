@@ -17,7 +17,8 @@ from kbash.gui.models import OptionModel
 SCRIPT = (
     "#!/usr/bin/env bash\n#@runtime 1\n#@name T\n"
     '#@option geral type=string label="Geral" default=x\n'
-    '#@option compressao type=choice label="Compressão" choices="lz4,zstd" default=lz4 needs_step=zram_passo\n'
+    '#@option compressao type=choice label="Compressão" choices="lz4,zstd" default=lz4 '
+    'needs_step=zram_passo\n'
     "#@step zram_passo\nzram_passo() { :; }\n"
 )
 

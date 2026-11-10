@@ -69,8 +69,8 @@ def test_multi_answer_format() -> None:
 def bash(script: str, stdin: str = "", env_extra: dict[str, str] | None = None):
     env = dict(os.environ)
     env.update(env_extra or {})
-    return subprocess.run(  # noqa: S603 - argv fixo, sem shell
-        ["bash", "-c", script],  # noqa: S607 - bash do PATH de teste
+    return subprocess.run(
+        ["bash", "-c", script],
         input=stdin,
         capture_output=True,
         text=True,
@@ -161,7 +161,7 @@ def test_helper_has_no_external_dependencies() -> None:
     for forbidden in ("jq", "python", "perl", "node", "gawk", "awk"):
         assert forbidden not in code, forbidden
     # e funciona com um PATH mínimo
-    result = subprocess.run(  # noqa: S603 - argv fixo, sem shell
+    result = subprocess.run(
         [shutil.which("bash") or "/bin/bash", "-c", f"source {HELPERS}; rt_progress 10 ok"],
         capture_output=True,
         text=True,
@@ -172,8 +172,8 @@ def test_helper_has_no_external_dependencies() -> None:
 
 
 def test_helper_syntax_is_valid() -> None:
-    result = subprocess.run(  # noqa: S603 - argv fixo, sem shell
-        ["bash", "-n", str(HELPERS)],  # noqa: S607 - bash do PATH de teste
+    result = subprocess.run(
+        ["bash", "-n", str(HELPERS)],
         capture_output=True,
         text=True,
         check=False,

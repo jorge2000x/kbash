@@ -1,12 +1,13 @@
 """Testes de robustez do core: entradas hostis e casos de borda.
 
-Cobrem os achados da revisão (SPEC.md §4.6, §7.4, §8.1–§8.3): exportações do
+Cobrem os achados da revisão (SPEC.md §4.6, §7.4, §8.1-§8.3): exportações do
 ``errors``, leitor IPC que não pode morrer, diretório IPC seguro e único,
 codificação de respostas e o parser sob entradas inválidas.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import time
@@ -213,10 +214,8 @@ HDR = "#!/usr/bin/env bash\n#@runtime 1\n#@name T\n"
     ],
 )
 def test_parser_raises_only_kbash_errors(text: str) -> None:
-    try:
+    with contextlib.suppress(KbashError):
         parse_text(text)
-    except KbashError:
-        pass
 
 
 def test_dependency_cycle_is_a_validation_error() -> None:

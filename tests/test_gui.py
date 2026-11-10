@@ -18,16 +18,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 # Breeze-somente não é coberta aqui — smoke manual na sessão com display.
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 
-from fixtures.paths import DEV_SETUP, FAILING  # noqa: E402
+from fixtures.paths import DEV_SETUP, FAILING
 
 pytest.importorskip("PySide6", reason="GUI exige PySide6")
 
-from PySide6.QtCore import QCoreApplication, QUrl  # noqa: E402
-from PySide6.QtGui import QGuiApplication  # noqa: E402
+from PySide6.QtCore import QCoreApplication, QUrl
+from PySide6.QtGui import QGuiApplication
 
-from kbash.core.model import StepState  # noqa: E402
-from kbash.gui.app import create_engine, qml_dir  # noqa: E402
-from kbash.gui.models import LOG_BUFFER, LogModel  # noqa: E402
+from kbash.core.model import StepState
+from kbash.gui.app import create_engine, qml_dir
+from kbash.gui.models import LOG_BUFFER, LogModel
 
 #: Valores mínimos para instanciar cada fachada num smoke test.
 #: Valores mínimos (expressões QML) para instanciar cada fachada no smoke test.
@@ -113,7 +113,7 @@ def app():
     instance.processEvents()
 
 
-def answer_prompts(bridge, value=True):  # noqa: ANN001, ANN201
+def answer_prompts(bridge, value=True):
     """Liga o provedor de UI da GUI a uma resposta automática (§8.5)."""
     bridge.promptRequested.connect(
         lambda request_id, *_rest: bridge.answer(request_id, value)
@@ -121,7 +121,7 @@ def answer_prompts(bridge, value=True):  # noqa: ANN001, ANN201
     return bridge
 
 
-def spin(app, predicate, timeout: float = 60.0) -> bool:  # noqa: ANN001
+def spin(app, predicate, timeout: float = 60.0) -> bool:
     """Roda o event loop do Qt até a condição valer (§10.4 — nada na thread GUI)."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -270,7 +270,7 @@ def test_go_to_page_ignores_unknown_destinations(gui) -> None:
 def test_go_to_page_cannot_leave_the_run_screen(gui) -> None:
     """Durante a execução a tela é a de execução: é onde ficam o log e o Cancelar."""
     _app, _engine, _roots, bridge = gui
-    bridge._running = True  # noqa: SLF001 — o guarda é justamente sobre esse estado
+    bridge._running = True
     for page in (0, 1, 3):
         bridge.goToPage(page)
         _app.processEvents()
@@ -505,7 +505,7 @@ def test_prompt_is_answered_through_bridge(app) -> None:
         seen: list[tuple] = []
         pending: list[str] = []
 
-        def on_prompt(rid, kind, text, label, default, choices, multi, secret):  # noqa: ANN001
+        def on_prompt(rid, kind, text, label, default, choices, multi, secret):
             seen.append((kind, text, default))
             pending.append(rid)
             bridge.answer(rid, True)
@@ -515,7 +515,7 @@ def test_prompt_is_answered_through_bridge(app) -> None:
         assert spin(application, lambda: bridge.resultStatus == "success")
         assert seen == [("confirm", "Continuar?", False)]
         assert "SIM" in bridge.logText()
-        assert not pending[0] == ""
+        assert pending[0] != ""
         bridge.shutdown()
         application.processEvents()
 
@@ -760,7 +760,7 @@ def test_kirigami_works_end_to_end(app, tmp_path: Path) -> None:
         "#@step ola\nola() { echo \"funciona\"; }\n",
         encoding="utf-8",
     )
-    application, engine, roots = create_engine(script)
+    application, engine, _roots = create_engine(script)
     bridge = engine.rootContext().contextProperty("bridge")
     try:
         assert bridge.guiKit == "kirigami"
@@ -909,7 +909,7 @@ def test_confirm_dialog_answers_no_without_cancelling(app, tmp_path: Path) -> No
             try:
                 if item.property("text") == label:
                     found.append(item)
-            except Exception:  # noqa: BLE001
+            except RuntimeError:  # item já destruído pelo Qt
                 pass
             for child in item.childItems():
                 walk(child, depth + 1)
@@ -989,7 +989,7 @@ def test_prompt_choice_delegates_show_text(app, tmp_path: Path) -> None:
                 children = list(item.childItems())
                 try:
                     content = item.property("contentItem")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     content = None
                 if isinstance(content, QQuickItem):
                     children.append(content)
@@ -997,7 +997,7 @@ def test_prompt_choice_delegates_show_text(app, tmp_path: Path) -> None:
                 # Dialog/Popup não é QQuickItem: entra pelo contentItem
                 try:
                     content = item.property("contentItem")  # type: ignore[union-attr]
-                except Exception:  # noqa: BLE001
+                except Exception:
                     return
                 children = [content] if isinstance(content, QQuickItem) else []
             for child in children:
@@ -1135,7 +1135,7 @@ def test_password_typing_is_not_cleared(app, tmp_path: Path) -> None:
                     try:
                         if item.property("type") == "password":
                             inner(item)
-                    except Exception:  # noqa: BLE001
+                    except RuntimeError:  # item já destruído pelo Qt
                         pass
                 for child in item.childItems():
                     walk(child, depth + 1)
@@ -1168,7 +1168,6 @@ _KEEPALIVE: list = []
 
 def _option_field(app, tmp_path: Path, **props: object):
     """Instancia um OptionField isolado com as propriedades dadas (§4.3)."""
-    from PySide6.QtQuick import QQuickItem
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
     from kbash.core.parser import parse_script
@@ -1283,7 +1282,6 @@ def test_option_file_renders_picker_with_filters(app, tmp_path: Path) -> None:
     assert spin(app, lambda: no_native_dialog())
 
     def picker_button() -> object:
-        from PySide6.QtQuick import QQuickItem
 
         found: list = []
 
@@ -1326,7 +1324,6 @@ def test_option_text_renders_textarea(app, tmp_path: Path) -> None:
 
 def _prompt_dialog(app, tmp_path: Path, **props: object):
     """Instancia um PromptDialog isolado (sem abrir) com as propriedades dadas."""
-    from PySide6.QtQuick import QQuickItem
     from PySide6.QtQml import QQmlComponent, QQmlEngine
 
     from kbash.core.parser import parse_script
@@ -1436,7 +1433,6 @@ def test_prompt_new_kinds_render_their_fields(app, tmp_path: Path) -> None:
 def test_log_drawer_opens_and_closes(app, tmp_path: Path) -> None:
     """Gaveta de log (§10.2.5): o bridge abre/fecha, a gaveta obedece."""
     from PySide6.QtCore import QObject
-    from PySide6.QtQuick import QQuickItem
 
     script = tmp_path / "drawer.sh"
     script.write_text(
@@ -1513,7 +1509,6 @@ def test_progresswin_dialog_follows_events(app, tmp_path: Path) -> None:
 
 def test_conditional_option_hides_and_shows(app, tmp_path: Path) -> None:
     """`show_if` esconde/mostra a opção no formulário (§4.3)."""
-    from PySide6.QtCore import QObject
     from PySide6.QtQuick import QQuickItem
 
     script = tmp_path / "cond.sh"
@@ -1672,21 +1667,21 @@ def test_portal_full_loop_without_ui(app, tmp_path: Path, monkeypatch) -> None:
         def __init__(self, ok: bool) -> None:
             self._ok = ok
 
-        def type(self):  # noqa: ANN204
+        def type(self):
             return (QDBusMessage.MessageType.ReplyMessage if self._ok
                     else QDBusMessage.MessageType.ErrorMessage)
 
-        def arguments(self):  # noqa: ANN204
+        def arguments(self):
             return [QDBusObjectPath(PATH)] if self._ok else []
 
     class FakeWatcher:
-        def __init__(self, reply):  # noqa: ANN204
+        def __init__(self, reply):
             self._reply = reply
 
-        def reply(self):  # noqa: ANN204
+        def reply(self):
             return self._reply
 
-        def deleteLater(self):  # noqa: ANN204
+        def deleteLater(self):
             pass
 
     script = tmp_path / "portal4.sh"
@@ -1736,17 +1731,17 @@ def test_portal_response_uint32_reaches_slot_over_bus(app, tmp_path: Path, monke
     monkeypatch.setattr(bmod, "_portal_service_available", lambda: True)
 
     class FakeReply:
-        def type(self):  # noqa: ANN204
+        def type(self):
             return QDBusMessage.MessageType.ReplyMessage
 
-        def arguments(self):  # noqa: ANN204
+        def arguments(self):
             return [QDBusObjectPath(PATH)]
 
     class FakeWatcher:
-        def reply(self):  # noqa: ANN204
+        def reply(self):
             return FakeReply()
 
-        def deleteLater(self):  # noqa: ANN204
+        def deleteLater(self):
             pass
 
     script = tmp_path / "portal5.sh"

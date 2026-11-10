@@ -17,7 +17,8 @@ from kbash.core.planner import build_plan, option_errors, option_visible
 HDR = "#!/usr/bin/env bash\n#@runtime 1\n#@name T\n"
 
 SCRIPT = HDR + (
-    '#@option compressao type=choice label="Compressão" choices="lz4,zstd" default=lz4 needs_step=zram_passo\n'
+    '#@option compressao type=choice label="Compressão" choices="lz4,zstd" default=lz4 '
+    'needs_step=zram_passo\n'
     '#@option chave type=string label="Chave" required=true needs_step=zram_passo\n'
     '#@option global type=string label="Global" default=x\n'
     "#@step zram_passo\nzram_passo() { :; }\n"

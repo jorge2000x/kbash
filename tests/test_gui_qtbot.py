@@ -43,6 +43,14 @@ b() { :; }
 @pytest.fixture()
 def janela(qtbot, tmp_path: Path):
     """Cria a aplicação Qt de verdade e devolve (engine, roots, bridge)."""
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtGui import QGuiApplication
+
+    existente = QCoreApplication.instance()
+    if existente is not None and not isinstance(existente, QGuiApplication):
+        # outro teste criou uma QCoreApplication neste processo; a GUI precisa de
+        # QGuiApplication. Rode tests/test_gui_qtbot.py em processo próprio.
+        pytest.skip("QCoreApplication já criada por outro teste neste processo")
     script = tmp_path / "smoke.sh"
     script.write_text(SCRIPT, encoding="utf-8")
     try:

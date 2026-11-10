@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from kbash.cli import embedded_script, main
 from kbash.core.model import placeholder_script

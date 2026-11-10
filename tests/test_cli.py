@@ -13,7 +13,7 @@ from fixtures.paths import DEV_SETUP, FAILING, HELPERS
 
 pytestmark = pytest.mark.usefixtures("fake_pkexec_on_path")  # §9.2: pkexec falso
 
-from kbash.cli import main
+from kbash.cli import main  # noqa: E402 — depois do pytestmark e dos fixtures
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
