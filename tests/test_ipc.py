@@ -433,3 +433,8 @@ def test_decode_campos_faltando_viram_vazio() -> None:
 
 def test_decode_ignora_quebra_final() -> None:
     assert decode_response("r1\tok\tv\n") == ("r1", "ok", "v")
+
+
+def test_decode_nao_remove_caracteres_do_valor_no_fim() -> None:
+    # rstrip só tira a quebra final, não letras iguais às de outro conjunto
+    assert decode_response("r1\tok\tvX\n") == ("r1", "ok", "vX")
