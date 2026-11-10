@@ -1198,6 +1198,9 @@ def _option_field(app, tmp_path: Path, **props: object):
     assert field is not None, [error.toString() for error in component.errors()]
     for key, value in props.items():
         field.setProperty(key, value)
+    # Sem largura, o layout do Kirigami não gera os filhos (campos ficam fora da árvore).
+    # Na app o OptionField sempre vive numa página com largura; aqui damos uma explícita.
+    field.setProperty("width", 400)
     return field
 
 
