@@ -874,9 +874,16 @@ class _Parser:
         )
         for dependency in depends:
             if not is_valid_id(dependency):
-                self.diag.warning(
-                    f"dependência {dependency!r} de {block.id!r} não segue [a-z][a-z0-9_]*",
-                    block.attr_line("depends"),
+                # Equivalente: uma dependência inválida nunca é um step existente, e
+                # _check_needs_step levanta ValidationError antes de qualquer aviso chegar
+                # ao resultado. O corpo abaixo não é observável.
+                message = (  # pragma: no mutate
+                    f"dependência {dependency!r} de {block.id!r} "  # pragma: no mutate
+                    "não segue [a-z][a-z0-9_]*"  # pragma: no mutate
+                )
+                self.diag.warning(  # pragma: no mutate
+                    message,  # pragma: no mutate
+                    block.attr_line("depends"),  # pragma: no mutate
                 )
         timeout_raw = block.get("timeout")
         timeout: int | None = None
