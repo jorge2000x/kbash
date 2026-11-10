@@ -9,28 +9,28 @@ from enum import Enum
 from pathlib import Path
 
 __all__ = [
-    "Option",
-    "Step",
-    "Action",
-    "Script",
-    "RunPlan",
-    "StepState",
-    "RunState",
-    "OPTION_TYPES",
-    "NON_VALUE_TYPES",
-    "LINK_SCHEMES",
-    "ON_ERROR_VALUES",
-    "RUNTIME_VERSION_SUPPORTED",
-    "ID_RE",
     "DATE_RE",
+    "ID_RE",
+    "LINK_SCHEMES",
+    "NON_VALUE_TYPES",
+    "ON_ERROR_VALUES",
+    "OPTION_TYPES",
+    "RUNTIME_VERSION_SUPPORTED",
     "TIME_RE",
-    "slugify",
+    "Action",
+    "Option",
+    "RunPlan",
+    "RunState",
+    "Script",
+    "Step",
+    "StepState",
+    "is_allowed_link",
+    "is_valid_date",
     "is_valid_id",
     "is_valid_number",
-    "is_valid_date",
     "is_valid_time",
-    "is_allowed_link",
     "placeholder_script",
+    "slugify",
 ]
 
 #: Versão de ``#@runtime`` suportada por este runtime (SPEC.md §4.2/§4.6).
@@ -111,7 +111,7 @@ def is_allowed_link(url: str) -> bool:
     return bool(sep) and scheme.lower() in LINK_SCHEMES and bool(rest.split("/", 1)[0])
 
 
-def placeholder_script() -> "Script":
+def placeholder_script() -> Script:
     """Script vazio da tela inicial (home): sem etapas nem opções, até o usuário
     escolher um arquivo. Não é executável; a GUI não oferece execução com ele."""
     return Script(
@@ -120,7 +120,7 @@ def placeholder_script() -> "Script":
     )
 
 
-class StepState(str, Enum):
+class StepState(str, Enum):  # noqa: UP042 — StrEnum mudaria str() dos membros
     """§5: pending → running → success | failed | cancelled | skipped."""
 
     PENDING = "pending"
@@ -131,7 +131,7 @@ class StepState(str, Enum):
     SKIPPED = "skipped"
 
 
-class RunState(str, Enum):
+class RunState(str, Enum):  # noqa: UP042 — StrEnum mudaria str() dos membros
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"

@@ -58,7 +58,7 @@ from .presets import PresetError, check_name, read_presets, write_presets
 from .models import GroupProxy, LogModel, OptionModel, SelectedStepsProxy, StepListModel
 from .ui_qt import QtUi
 
-__all__ = ["Bridge", "PAGE_WELCOME", "PAGE_SELECT", "PAGE_RUN", "PAGE_RESULT", "TICK_MS"]
+__all__ = ["PAGE_RESULT", "PAGE_RUN", "PAGE_SELECT", "PAGE_WELCOME", "TICK_MS", "Bridge"]
 
 PAGE_WELCOME, PAGE_SELECT, PAGE_RUN, PAGE_RESULT = 0, 1, 2, 3
 
@@ -123,7 +123,12 @@ class Bridge(QObject):
     # -- gaveta de log (§10.2.5): abre/fecha sem painel fixo
     logDrawerOpenChanged = Signal()
 
-    def __init__(self, script: Script | None = None, assets: Path | None = None, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        script: Script | None = None,
+        assets: Path | None = None,
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         # sem script = tela inicial (home): o placeholder não tem etapas nem opções
         script = script if script is not None else placeholder_script()
@@ -286,7 +291,9 @@ class Bridge(QObject):
     canRun = Property(bool, lambda self: self._can_run(), notify=canRunChanged)
 
     precheckProblemsChanged = Signal()
-    precheckProblems = Property("QStringList", lambda self: list(self._precheck_problems), notify=precheckProblemsChanged)
+    precheckProblems = Property(
+        "QStringList", lambda self: list(self._precheck_problems), notify=precheckProblemsChanged
+    )
 
     rootStepsChanged = Signal()
     rootSteps = Property("QStringList", lambda self: self._root_steps(), notify=rootStepsChanged)
@@ -328,18 +335,26 @@ class Bridge(QObject):
     stepCount = Property(int, lambda self: self._steps_model.rowCount(), notify=stepCountChanged)
 
     selectedCountChanged = Signal()
-    selectedCount = Property(int, lambda self: len(self._steps_model.checked_ids()), notify=selectedCountChanged)
+    selectedCount = Property(
+        int, lambda self: len(self._steps_model.checked_ids()), notify=selectedCountChanged
+    )
 
     optionCountChanged = Signal()
     optionCount = Property(int, lambda self: self._options_model.rowCount(), notify=optionCountChanged)
 
     #: §4.8.1 — grupos na ordem de declaração ("" = bloco sem título)
     groupsChanged = Signal()
-    groupNames = Property("QStringList", lambda self: list(self._script.groups) if self._script else [], notify=groupsChanged)
+    groupNames = Property(
+        "QStringList",
+        lambda self: list(self._script.groups) if self._script else [],
+        notify=groupsChanged,
+    )
 
     #: §4.8 — ações e o último resultado de cada uma (dicts para o QML)
     actionsChanged = Signal()
-    actions = Property("QVariantList", lambda self: [dict(v) for v in self._actions.values()], notify=actionsChanged)
+    actions = Property(
+        "QVariantList", lambda self: [dict(v) for v in self._actions.values()], notify=actionsChanged
+    )
     # opções gerais (sem needs_step): usada para mostrar a linha de predefinições
     generalOptionCount = Property(
         int, lambda self: self._options_model.general_count(), notify=optionCountChanged
@@ -377,12 +392,12 @@ class Bridge(QObject):
         self.actionsChanged.emit()
 
     @Slot(str, result=QObject)
-    def optionsFor(self, group: str) -> QObject:  # noqa: N802
+    def optionsFor(self, group: str) -> QObject:
         """Opções gerais do bloco ``group`` (proxy reaproveitado)."""
         return self._group_proxy("options", group)
 
     @Slot(str, result=QObject)
-    def stepsFor(self, group: str) -> QObject:  # noqa: N802
+    def stepsFor(self, group: str) -> QObject:
         """Steps do bloco ``group`` (proxy reaproveitado)."""
         return self._group_proxy("steps", group)
 
@@ -400,7 +415,7 @@ class Bridge(QObject):
         return self._group_proxies[key]
 
     @Slot(str)
-    def runAction(self, action_id: str) -> None:  # noqa: N802
+    def runAction(self, action_id: str) -> None:
         """§4.8/§7.6 — roda uma ação numa thread, com os valores atuais da tela."""
         state = self._actions.get(action_id)
         if self._script is None or state is None or self._running:
@@ -429,7 +444,7 @@ class Bridge(QObject):
                             helpers=helpers_path(), assets=assets, workdir=tmp,
                         )
                     status, code, output = result.status, result.exit_code, result.output
-            except Exception as exc:  # noqa: BLE001 — a thread não pode morrer calada
+            except Exception as exc:
                 output = str(exc)
             self._actionDone.emit(action_id, status, -1 if code is None else code, output)
 
@@ -443,7 +458,7 @@ class Bridge(QObject):
         self.actionsChanged.emit()
 
     @Slot(int)
-    def goToPage(self, page: int) -> None:  # noqa: N802
+    def goToPage(self, page: int) -> None:
         """§10.2 — troca de tela a pedido de um botão.
 
         Ignora destinos fora do conjunto (§10.2 tem 4 telas) e, enquanto a
@@ -457,7 +472,7 @@ class Bridge(QObject):
             return
         self._set_page(int(page))
 
-    def setGuiKit(self, kit: str) -> None:  # noqa: N802
+    def setGuiKit(self, kit: str) -> None:
         self._gui_kit = kit
         self.guiKitChanged.emit()
 
@@ -492,7 +507,7 @@ class Bridge(QObject):
         return [option for option in self._script.options if option.type != "password"]
 
     @Slot(str, result=bool)
-    def savePreset(self, name: str) -> bool:  # noqa: N802
+    def savePreset(self, name: str) -> bool:
         """Salva os valores atuais das opções (sem senhas) como predefinição ``name``."""
         if not self._script.id:
             self.notifyRaised.emit("este script não tem id: não dá para salvar predefinições", "error")
@@ -512,7 +527,7 @@ class Bridge(QObject):
         return True
 
     @Slot(str, result=bool)
-    def loadPreset(self, name: str) -> bool:  # noqa: N802
+    def loadPreset(self, name: str) -> bool:
         """Aplica a predefinição ``name`` às opções (senhas ficam como estão)."""
         values = self._presets.get(name)
         if values is None:
@@ -526,7 +541,7 @@ class Bridge(QObject):
         return True
 
     @Slot(str, result=bool)
-    def deletePreset(self, name: str) -> bool:  # noqa: N802
+    def deletePreset(self, name: str) -> bool:
         """Apaga a predefinição ``name`` do arquivo do script."""
         try:
             presets = read_presets(self._script.id)
@@ -542,7 +557,7 @@ class Bridge(QObject):
         return True
 
     @Slot()
-    def refreshLibrary(self) -> None:  # noqa: N802
+    def refreshLibrary(self) -> None:
         """Relê a pasta do programa (gui/library.py)."""
         self._library = [
             {"path": str(entry.path), "name": entry.name,
@@ -553,7 +568,7 @@ class Bridge(QObject):
         self.libraryChanged.emit()
 
     @Slot(str, result=bool)
-    def loadScript(self, location: str) -> bool:  # noqa: N802
+    def loadScript(self, location: str) -> bool:
         """§10.2.0 — abre um ``.sh`` escolhido no portal ou arrastado para a home.
 
         Recusa com aviso se houver execução em andamento, se não for ``.kbash`` ou ``.sh``, se
@@ -603,14 +618,15 @@ class Bridge(QObject):
     # -- ícone (§4.2) ----------------------------------------------------
     def _icon_name(self) -> str:
         """Nome de ícone do tema; ``#@icon`` que é arquivo vem em `_icon_file` (gui/library.py)."""
-        return resolve_icon(self._script.icon, self._script.path, self._assets)[0] or "application-x-executable"
+        icon = resolve_icon(self._script.icon, self._script.path, self._assets)[0]
+        return icon or "application-x-executable"
 
     def _icon_file(self) -> str:
         """Caminho do ícone quando ``#@icon`` aponta para um arquivo em ``assets/``."""
         return resolve_icon(self._script.icon, self._script.path, self._assets)[1]
 
     @Slot(str, bool, result=bool)
-    def setStepChecked(self, step_id: str, checked: bool) -> bool:  # noqa: N802
+    def setStepChecked(self, step_id: str, checked: bool) -> bool:
         selected = set(self._steps_model.checked_ids())
         try:
             new = set_checked(self._script, selected, step_id, bool(checked))
@@ -621,7 +637,7 @@ class Bridge(QObject):
         return True
 
     @Slot(str, str)
-    def setOption(self, option_id: str, value: str) -> None:  # noqa: N802
+    def setOption(self, option_id: str, value: str) -> None:
         # id vazio nunca é opção válida (parser exige `[a-z][a-z0-9_]*`):
         # um delegate transitório (bindings ainda montando no startup)
         # pode disparar o handler com optId vazio; ignorar evita
@@ -632,24 +648,24 @@ class Bridge(QObject):
         self._refresh_selection()
 
     @Slot(str, result=str)
-    def uncheckReason(self, step_id: str) -> str:  # noqa: N802
+    def uncheckReason(self, step_id: str) -> str:
         return self._blocked.get(step_id, "")
 
     # -- portal de arquivos (§10.1) ----------------------------------
     @Slot(str, str)
-    def pickFolder(self, token: str, title: str) -> None:  # noqa: N802
+    def pickFolder(self, token: str, title: str) -> None:
         """Abre o seletor de pastas nativo (portal `OpenFile` + `directory`)."""
         self._portal_open("folder", token, title, {"directory": True})
 
     @Slot(str, str, bool)
-    def pickOpenFile(self, token: str, title: str, multiple: bool) -> None:  # noqa: N802
+    def pickOpenFile(self, token: str, title: str, multiple: bool) -> None:
         """Abre o seletor de arquivos nativo (portal `OpenFile`, sem filtro:
         o QtDBus não expressa a estrutura aninhada `a(sa(su))` a partir
         de Python, então o portal mostra todos os arquivos)."""
         self._portal_open("open", token, title, {"multiple": bool(multiple)})
 
     @Slot(str, str, str)
-    def pickSaveFile(self, token: str, title: str, name: str) -> None:  # noqa: N802
+    def pickSaveFile(self, token: str, title: str, name: str) -> None:
         """Abre o salvamento nativo (portal `SaveFile`)."""
         self._portal_open("save", token, title, {"current_name": str(name or "")})
     def _portal_open(self, kind: str, token: str, title: str, options: dict[str, object]) -> None:
@@ -703,10 +719,7 @@ class Bridge(QObject):
         """Resposta (handle) da chamada ao portal; assina o `Response`."""
         from PySide6.QtDBus import QDBusConnection, QDBusMessage
 
-        try:
-            watcher.deleteLater()
-        except Exception:
-            pass
+        watcher.deleteLater()
         token = self._portal_token
         if token is None:
             return
@@ -756,10 +769,9 @@ class Bridge(QObject):
             try:
                 from PySide6.QtDBus import QDBusConnection
 
-                QDBusConnection.sessionBus().disconnect(
-                    *conn, self, PORTAL_RESPONSE_SLOT)
-            except Exception:
-                pass
+                QDBusConnection.sessionBus().disconnect(*conn, self, PORTAL_RESPONSE_SLOT)
+            except (RuntimeError, TypeError) as exc:  # já desconectado: só registra
+                _log_portal(f"desconexão do portal ignorada: {exc}")
         if token is None:
             return
         paths: list[str] = []
@@ -782,8 +794,8 @@ class Bridge(QObject):
                 from PySide6.QtDBus import QDBusConnection
 
                 QDBusConnection.sessionBus().disconnect(*conn, self, PORTAL_RESPONSE_SLOT)
-            except Exception:
-                pass
+            except (RuntimeError, TypeError) as exc:  # já desconectado: só registra
+                _log_portal(f"desconexão do portal ignorada: {exc}")
         if token is None:
             return
         self.notifyRaised.emit("a janela de seleção não respondeu; tente de novo", "warn")
@@ -846,14 +858,14 @@ class Bridge(QObject):
         self.ui.resolve(request_id, value)
 
     @Slot(str)
-    def cancelPrompt(self, request_id: str) -> None:  # noqa: N802
+    def cancelPrompt(self, request_id: str) -> None:
         """O usuário fechou o diálogo: o script recebe ``cancel`` (§7.4)."""
         from ..core.ui import CANCEL_SENTINEL
 
         self.ui.resolve(request_id, CANCEL_SENTINEL)
 
     @Slot(str, str, str, str, "QVariant", "QStringList", bool, bool, str, str)
-    def _on_prompt_requested(  # noqa: N802
+    def _on_prompt_requested(
         self, request_id: str, kind: str, text: str, label: str, default: Any,
         choices: list[str], multi: bool, secret: bool, minimum: str = "", maximum: str = "",
     ) -> None:
@@ -879,7 +891,7 @@ class Bridge(QObject):
         threading.Thread(target=worker, name="kbash-prompt", daemon=True).start()
 
     @Slot()
-    def retryFailed(self) -> None:  # noqa: N802
+    def retryFailed(self) -> None:
         failed = self._steps_model.failed_ids()
         if not failed:
             return
@@ -889,14 +901,14 @@ class Bridge(QObject):
         self.start()
 
     @Slot()
-    def closeApp(self) -> None:  # noqa: N802
+    def closeApp(self) -> None:
         self.cancel()
         from PySide6.QtGui import QGuiApplication
 
         QGuiApplication.quit()
 
     @Slot(str, result=bool)
-    def saveLog(self, path: str) -> bool:  # noqa: N802
+    def saveLog(self, path: str) -> bool:
         try:
             header = f"# {self._script.name} ({self._script.id}) sha256={self._script.sha256}"
             self._log_model.to_file(path, header)
@@ -907,7 +919,7 @@ class Bridge(QObject):
         return True
 
     @Slot(str, result=bool)
-    def openLink(self, url: str) -> bool:  # noqa: N802
+    def openLink(self, url: str) -> bool:
         """§4.3 — ``type=link``: abre o endereço declarado no script no navegador
         padrão. Só ``http``/``https``; qualquer outro esquema é recusado."""
         if not is_allowed_link(url):
@@ -922,7 +934,7 @@ class Bridge(QObject):
         return opened
 
     @Slot(result=str)
-    def logText(self) -> str:  # noqa: N802
+    def logText(self) -> str:
         self._log_model.flush()  # garante que o texto salvo/copiado está completo
         # sem logCountChanged aqui: emitir signal de dentro do getter
         # durante a avaliação de um binding (`text: bridge.logText()`)
@@ -930,7 +942,7 @@ class Bridge(QObject):
         return self._log_model.text()
 
     @Slot(str)
-    def copyToClipboard(self, text: str) -> None:  # noqa: N802
+    def copyToClipboard(self, text: str) -> None:
         from PySide6.QtGui import QGuiApplication
 
         app = QGuiApplication.instance()
@@ -942,7 +954,8 @@ class Bridge(QObject):
     # ------------------------------------------------------------------
     def _run(self) -> None:
         executor = self._executor
-        assert executor is not None
+        if executor is None:
+            raise RuntimeError("thread de execução iniciada sem Executor")
         try:
             result = executor.run(self._queue.put, check=True)
         except PrecheckError as exc:

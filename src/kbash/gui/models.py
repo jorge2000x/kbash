@@ -8,21 +8,21 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from typing import Any
+from typing import Any, ClassVar
 
 from PySide6.QtCore import (
     QAbstractListModel,
     QByteArray,
     QModelIndex,
+    QObject,
     QSortFilterProxyModel,
     Qt,
-    Signal,
 )
 
 from ..core.model import Script, Step, StepState
 from ..core.planner import option_visible
 
-__all__ = ["StepListModel", "OptionModel", "LogModel", "SelectedStepsProxy", "LOG_BUFFER"]
+__all__ = ["LOG_BUFFER", "LogModel", "OptionModel", "SelectedStepsProxy", "StepListModel"]
 
 #: §10.3 — buffer circular do log.
 LOG_BUFFER = 20_000
@@ -58,7 +58,7 @@ class StepListModel(QAbstractListModel):
     Reason = _role("reason", 12)
     StatusLabel = _role("statusLabel", 13)
 
-    _NAMES = {
+    _NAMES: ClassVar[dict[int, bytes]] = {
         StepId: b"stepId",
         Title: b"title",
         Description: b"description",
@@ -83,10 +83,12 @@ class StepListModel(QAbstractListModel):
         self._status: dict[str, tuple[str, float, str]] = {}
 
     # -- API Qt ----------------------------------------------------------
-    def roleNames(self) -> dict[int, QByteArray]:  # noqa: N802 (nome Qt)
+    def roleNames(self) -> dict[int, QByteArray]:
         return {role: QByteArray(name) for role, name in self._NAMES.items()}
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
+    def rowCount(self, parent: QModelIndex | None = None) -> int:
+        if parent is None:  # B008: índice vazio criado aqui, não no default
+            parent = QModelIndex()
         return 0 if parent.isValid() else len(self._steps)
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
@@ -134,7 +136,11 @@ class StepListModel(QAbstractListModel):
         self.endResetModel()
 
     def set_auto_added(self, ids: set[str]) -> None:
-        changed = [i for i, step in enumerate(self._steps) if self._auto.get(step.id, False) != (step.id in ids)]
+        changed = [
+            i
+            for i, step in enumerate(self._steps)
+            if self._auto.get(step.id, False) != (step.id in ids)
+        ]
         for row in changed:
             self._auto[self._steps[row].id] = self._steps[row].id in ids
         if changed:
@@ -229,7 +235,7 @@ class OptionModel(QAbstractListModel):
     #: §4.8.1: grupo de exibição (`group=`); "" = bloco sem título.
     Group = _role("group", 21)
 
-    _NAMES = {
+    _NAMES: ClassVar[dict[int, bytes]] = {
         OptId: b"optId",
         Type: b"type",
         Label: b"label",
@@ -264,10 +270,12 @@ class OptionModel(QAbstractListModel):
         #: leitura do QML (cada linha de step lê o papel `Visible`)
         self._visible: list[bool] = []
 
-    def roleNames(self) -> dict[int, QByteArray]:  # noqa: N802
+    def roleNames(self) -> dict[int, QByteArray]:
         return {role: QByteArray(name) for role, name in self._NAMES.items()}
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
+    def rowCount(self, parent: QModelIndex | None = None) -> int:
+        if parent is None:  # B008: índice vazio criado aqui, não no default
+            parent = QModelIndex()
         return 0 if parent.isValid() or self._script is None else len(self._script.options)
 
     def general_count(self) -> int:
@@ -456,7 +464,12 @@ class LogModel(QAbstractListModel):
     Level = _role("level", 3)
     StepId = _role("stepId", 4)
 
-    _NAMES = {Text: b"text", Stream: b"stream", Level: b"level", StepId: b"stepId"}
+    _NAMES: ClassVar[dict[int, bytes]] = {
+        Text: b"text",
+        Stream: b"stream",
+        Level: b"level",
+        StepId: b"stepId",
+    }
 
     def __init__(self, parent: Any = None, capacity: int = LOG_BUFFER) -> None:
         super().__init__(parent)
@@ -466,10 +479,12 @@ class LogModel(QAbstractListModel):
         self._lock = threading.Lock()
         self._dropped = 0
 
-    def roleNames(self) -> dict[int, QByteArray]:  # noqa: N802
+    def roleNames(self) -> dict[int, QByteArray]:
         return {role: QByteArray(name) for role, name in self._NAMES.items()}
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
+    def rowCount(self, parent: QModelIndex | None = None) -> int:
+        if parent is None:  # B008: índice vazio criado aqui, não no default
+            parent = QModelIndex()
         return 0 if parent.isValid() else len(self._lines)
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
