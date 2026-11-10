@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Portão único de verificação do core (SPEC.md §16.4). Para no primeiro erro.
 #
-#   tools/verificar.sh            # compara com origin/main e checa só o que mudou
-#   BASE=HEAD~3 tools/verificar.sh
+#   tools/verificar.sh                 # portão completo, mutmut incluso (§16)
+#   PULAR_MUTMUT=1 tools/verificar.sh  # sem o passo 5 (mutmut é opcional no CI)
+#   BASE=HEAD~3 tools/verificar.sh     # base usada só no cálculo de mutmut incremental
 #
 # Requer: pip install -e ".[dev]" (ruff, pyright, pytest, hypothesis, icontract,
 # crosshair-tool, mutmut). PYTHON aponta o interpretador (padrão: python3).
@@ -13,13 +14,7 @@ PY="${PYTHON:-python3}"
 BASE="${BASE:-origin/main}"
 export PYTHONNOUSERSITE=1 QT_QPA_PLATFORM=offscreen
 
-# módulos críticos (§16.1) e funções puras que o crosshair analisa (§16.3)
-CRITICOS=(
-    src/kbash/core/parser.py
-    src/kbash/core/planner.py
-    src/kbash/core/ipc.py
-    src/kbash/core/actions.py
-)
+# funções puras que o crosshair analisa (§16.3)
 CROSSHAIR_ALVOS=(
     kbash.core.planner.resolve
     kbash.core.parser.parse_text
@@ -29,16 +24,11 @@ CROSSHAIR_ALVOS=(
     kbash.core.actions.action_env
 )
 
-# arquivos Python alterados em relação à base, somados aos críticos
-ALTERADOS=$(git diff --name-only --diff-filter=ACMR "$BASE" -- '*.py' 2>/dev/null || true)
-ALVOS_LINT=$(printf '%s\n' "${CRITICOS[@]}" $ALTERADOS | sort -u | grep -E '\.py$' || true)
-
-echo "== 1/5 ruff (alterados + críticos)"
-# shellcheck disable=SC2086  # a lista é de caminhos sem espaços
-"$PY" -m ruff check $ALVOS_LINT
+echo "== 1/5 ruff (repositório inteiro)"
+"$PY" -m ruff check .
 
 echo "== 2/5 pyright (core)"
-"$PY" -m pyright
+"$PY" -m pyright --pythonpath "$(command -v "$PY")"
 
 echo "== 3/5 pytest (core; a GUI exige Kirigami e display)"
 "$PY" -m pytest tests/ -q --ignore=tests/test_gui.py --ignore=tests/test_ui.py
@@ -47,6 +37,11 @@ echo "== 4/5 crosshair (funções puras, tempo limitado por condição)"
 (cd src && "$PY" -m crosshair check "${CROSSHAIR_ALVOS[@]}" \
     --per_condition_timeout 8 --per_path_timeout 2)
 
+if [ "${PULAR_MUTMUT:-0}" = "1" ]; then
+    echo "== 5/5 mutmut: pulado (PULAR_MUTMUT=1; ver a job opcional no CI)"
+    echo "verificação ok (sem mutmut)"
+    exit 0
+fi
 echo "== 5/5 mutmut (módulos críticos; sobrevivente é falha)"
 "$PY" -m mutmut run
 SOBREVIVENTES=$("$PY" -m mutmut results | grep -cE "survived|no tests" || true)
