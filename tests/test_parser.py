@@ -652,3 +652,48 @@ def test_erro_de_step_e_ciclo_com_mensagem_exata(text: str, exc_type: type, line
 def test_aviso_de_step_com_linha_exata(text: str, esperados: list) -> None:
     result = parse_text(text, Path("t.sh"))
     assert [(w.line, w.message) for w in result.warnings] == esperados
+
+
+CAMPOS_STEP = [
+    (_HDR + "#@step a\n#@function f\nf() { :; }\n", "function", "f"),
+    (_HDR + "#@step a\na() { :; }\n", "function", "a"),
+    (_HDR + '#@step a\n#@title "Olá"\na() { :; }\n', "title", "Olá"),
+    (_HDR + "#@step a\na() { :; }\n", "title", "a"),
+    (_HDR + '#@step a\n#@group "G"\na() { :; }\n', "group", "G"),
+    (_HDR + "#@step a\na() { :; }\n", "group", None),
+    (_HDR + "#@step a\n#@timeout 5\na() { :; }\n", "timeout", 5),
+    (_HDR + "#@step a\n#@timeout 1\na() { :; }\n", "timeout", 1),
+    (_HDR + "#@step a\na() { :; }\n", "timeout", None),
+    (_HDR + "#@step a\n#@on_error continue\na() { :; }\n", "on_error", "continue"),
+    (_HDR + "#@step a\na() { :; }\n", "on_error", "stop"),
+    (_HDR + "#@step a\n#@on_error talvez\na() { :; }\n", "on_error", "stop"),
+    (_HDR + "#@step a\n#@default on\na() { :; }\n", "default", True),
+    (_HDR + "#@step a\n#@default ON\na() { :; }\n", "default", True),
+    (_HDR + "#@step a\n#@default off\na() { :; }\n", "default", False),
+    (_HDR + "#@step a\na() { :; }\n", "default", True),
+    (_HDR + "#@step a\n#@required\na() { :; }\n", "required", True),
+    (_HDR + "#@step a\na() { :; }\n", "required", False),
+    (_HDR + "#@step a\n#@root\na() { :; }\n", "root", True),
+    (_HDR + "#@step a\na() { :; }\n", "root", False),
+    (_HDR + "#@step b\nb() { :; }\n#@step c\nc() { :; }\n#@step a\n#@depends b, c\na() { :; }\n",
+     "depends", ("b", "c")),
+]
+
+AVISOS_STEP_LIMITE = [
+    (_HDR + "#@step a\n#@timeout 1\na() { :; }\n", []),
+    (_HDR + "#@step a\n#@default ON\na() { :; }\n", []),
+    (_HDR + "#@step b\nb() { :; }\n#@step a\n#@depends b\na() { :; }\n", []),
+]
+
+
+@pytest.mark.parametrize(("text", "campo", "esperado"), CAMPOS_STEP)
+def test_campo_do_step(text: str, campo: str, esperado: object) -> None:
+    script = parse_text(text, Path("t.sh")).script
+    step = next(s for s in script.steps if s.id == "a")
+    assert getattr(step, campo) == esperado
+
+
+@pytest.mark.parametrize(("text", "esperados"), AVISOS_STEP_LIMITE)
+def test_sem_aviso_nos_valores_de_borda_do_step(text: str, esperados: list) -> None:
+    result = parse_text(text, Path("t.sh"))
+    assert [(w.line, w.message) for w in result.warnings] == esperados
