@@ -667,6 +667,7 @@ CAMPOS_STEP = [
     (_HDR + "#@step a\n#@on_error continue\na() { :; }\n", "on_error", "continue"),
     (_HDR + "#@step a\na() { :; }\n", "on_error", "stop"),
     (_HDR + "#@step a\n#@on_error talvez\na() { :; }\n", "on_error", "stop"),
+    (_HDR + "#@step a\n#@on_error   \na() { :; }\n", "on_error", "stop"),
     (_HDR + "#@step a\n#@default on\na() { :; }\n", "default", True),
     (_HDR + "#@step a\n#@default ON\na() { :; }\n", "default", True),
     (_HDR + "#@step a\n#@default off\na() { :; }\n", "default", False),
@@ -682,6 +683,7 @@ CAMPOS_STEP = [
 AVISOS_STEP_LIMITE = [
     (_HDR + "#@step a\n#@timeout 1\na() { :; }\n", []),
     (_HDR + "#@step a\n#@default ON\na() { :; }\n", []),
+    (_HDR + "#@step a\n#@on_error   \na() { :; }\n", []),
     (_HDR + "#@step b\nb() { :; }\n#@step a\n#@depends b\na() { :; }\n", []),
 ]
 
