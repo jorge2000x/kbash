@@ -509,3 +509,146 @@ def test_erro_com_mensagem_e_linha_exatas(text: str, exc_type: type, line, messa
 def test_aviso_com_linha_e_mensagem_exatas(text: str, esperados: list) -> None:
     result = parse_text(text, Path("t.sh"))
     assert [(w.line, w.message) for w in result.warnings] == esperados
+
+
+ERROS_OPCAO = [
+    (_HDR + "#@option o type=choice\n" + "#@step s\ns() { :; }\n", ValidationError, 3,
+     "#@option 'o' type=choice exige choices"),
+    (_HDR + "#@option o type=multi\n" + "#@step s\ns() { :; }\n", ValidationError, 3,
+     "#@option 'o' type=multi exige choices"),
+    (_HDR + '#@option o type=choice choices="a,b" default=c\n' + "#@step s\ns() { :; }\n",
+     ValidationError, 3, "default='c' de #@option 'o' não está em choices (a, b)"),
+    (_HDR + "#@option o type=date default=\"31/12/2026\"\n" + "#@step s\ns() { :; }\n",
+     ValidationError, 3, "default='31/12/2026' de #@option 'o' não é data ISO (AAAA-MM-DD)"),
+    (_HDR + '#@option o type=time default="8:30"\n' + "#@step s\ns() { :; }\n",
+     ValidationError, 3, "default='8:30' de #@option 'o' não é hora (HH:MM)"),
+    (_HDR + "#@option o type=string needs_step=zz\n" + "#@step s\ns() { :; }\n",
+     ValidationError, 3, "needs_step de #@option 'o' aponta para step inexistente 'zz'"),
+]
+
+AVISOS_OPCAO = [
+    (_HDR + "#@option o type=zzz\n#@step s\ns() { :; }\n",
+     [(3, "type='zzz' desconhecido em #@option 'o'; usando 'string'")]),
+    (_HDR + "#@option o type=bool default=talvez\n#@step s\ns() { :; }\n",
+     [(3, "default='talvez' de #@option 'o' (bool) não é booleano")]),
+    (_HDR + "#@option o type=bool required=true\n#@step s\ns() { :; }\n",
+     [(3, "#@option 'o' é required mas do tipo bool")]),
+    (_HDR + '#@option o type=string filters="*.png"\n#@step s\ns() { :; }\n',
+     [(3, "filters de #@option 'o' só vale para type=file")]),
+    (_HDR + '#@option o type=string needs_step=s group="G"\n#@step s\ns() { :; }\n',
+     [(3, "group em #@option 'o' ignorado: a opção fica na linha do step")]),
+]
+
+
+@pytest.mark.parametrize(("text", "exc_type", "line", "message"), ERROS_OPCAO)
+def test_erro_de_opcao_com_mensagem_e_linha_exatas(text: str, exc_type: type, line, message: str) -> None:
+    with pytest.raises(exc_type) as exc:
+        parse_text(text, Path("t.sh"))
+    assert exc.value.diagnostic.message == message
+    assert exc.value.diagnostic.line == line
+
+
+@pytest.mark.parametrize(("text", "esperados"), AVISOS_OPCAO)
+def test_aviso_de_opcao_com_linha_e_mensagem_exatas(text: str, esperados: list) -> None:
+    result = parse_text(text, Path("t.sh"))
+    assert [(w.line, w.message) for w in result.warnings] == esperados
+
+
+ERROS_FAIXA_E_TEXTO = [
+    (_HDR + '#@option o type=number min=abc\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "min='abc' de #@option 'o' não é número"),
+    (_HDR + '#@option o type=number max=abc\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "max='abc' de #@option 'o' não é número"),
+    (_HDR + '#@option o type=number step=abc\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "step='abc' de #@option 'o' não é número"),
+    (_HDR + "#@option o type=number step=0\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "step='0' de #@option 'o' precisa ser > 0"),
+    (_HDR + "#@option o type=number min=5 max=1\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "min='5' maior que max='1' em #@option 'o'"),
+    (_HDR + "#@option o type=number default=abc\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "default='abc' de #@option 'o' não é número"),
+    (_HDR + "#@option o type=number min=2 default=1\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "default='1' de #@option 'o' abaixo de min='2'"),
+    (_HDR + "#@option o type=number max=2 default=3\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "default='3' de #@option 'o' acima de max='2'"),
+    (_HDR + '#@option o type=string pattern="["\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "pattern='[' de #@option 'o' é regex inválida: unterminated character set at position 0"),
+    (_HDR + '#@option o type=string pattern="^[a-z]+$" default=ABC\n#@step s\ns() { :; }\n',
+     ValidationError, 3, "default='ABC' de #@option 'o' não casa com pattern"),
+    (_HDR + "#@option o type=string minlen=x\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "minlen='x' de #@option 'o' precisa ser inteiro >= 0"),
+    (_HDR + "#@option o type=string maxlen=-1\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "maxlen='-1' de #@option 'o' precisa ser inteiro >= 0"),
+    (_HDR + "#@option o type=string minlen=5 maxlen=2\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "minlen='5' maior que maxlen='2' em #@option 'o'"),
+    (_HDR + "#@option o type=string minlen=3 default=ab\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "default de #@option 'o' menor que minlen='3'"),
+    (_HDR + "#@option o type=string maxlen=2 default=abc\n#@step s\ns() { :; }\n", ValidationError, 3,
+     "default de #@option 'o' maior que maxlen='2'"),
+]
+
+AVISOS_FAIXA_E_TEXTO = [
+    (_HDR + '#@option p type=paragraph label="x" url="https://x"\n#@step s\ns() { :; }\n',
+     [(3, "url de #@option 'p' só vale para type=link")]),
+    (_HDR + "#@option o type=string min=1\n#@step s\ns() { :; }\n",
+     [(3, "min/max/step de #@option 'o' só vale para type=number/slider")]),
+    (_HDR + '#@option o type=number pattern="a"\n#@step s\ns() { :; }\n',
+     [(3, "pattern/minlen/maxlen de #@option 'o' só vale para string/password/text")]),
+    (_HDR + "#@option o type=string multiple=true\n#@step s\ns() { :; }\n",
+     [(3, "multiple de #@option 'o' só vale para type=file")]),
+]
+
+
+@pytest.mark.parametrize(("text", "exc_type", "line", "message"), ERROS_FAIXA_E_TEXTO)
+def test_erro_de_faixa_e_texto_com_mensagem_exata(text: str, exc_type: type, line, message: str) -> None:
+    with pytest.raises(exc_type) as exc:
+        parse_text(text, Path("t.sh"))
+    assert exc.value.diagnostic.message == message
+    assert exc.value.diagnostic.line == line
+
+
+@pytest.mark.parametrize(("text", "esperados"), AVISOS_FAIXA_E_TEXTO)
+def test_aviso_de_faixa_e_texto_com_linha_exata(text: str, esperados: list) -> None:
+    result = parse_text(text, Path("t.sh"))
+    assert [(w.line, w.message) for w in result.warnings] == esperados
+
+
+ERROS_STEP_E_CICLO = [
+    (_HDR + "#@step s\ns2() { :; }\n", ValidationError, 3,
+     "step 's': a função definida é 's2', o id deve ser igual ao nome da função (ou use #@function)"),
+    (_HDR + "#@step s\n#@function nope\ns() { :; }\n", ValidationError, 3,
+     "função 'nope' do step 's' não encontrada no script"),
+    (_HDR + "#@step a\n#@depends zz\na() { :; }\n", ValidationError, 4,
+     "#@depends 'zz' do step 'a' aponta para um step inexistente"),
+    (_HDR + "#@step a\n#@depends b\na() { :; }\n#@step b\n#@depends a\nb() { :; }\n",
+     ValidationError, 3, "ciclo nas dependências: a -> b -> a"),
+    (_HDR + '#@option o type=string show_if="o=1"\n#@step s\ns() { :; }\n', ValidationError, 3,
+     "show_if de #@option 'o' referencia a si mesma"),
+    (_HDR + '#@option a type=string show_if="b=1"\n#@option b type=string show_if="a=1"\n'
+     + "#@step s\ns() { :; }\n", ValidationError, 4, "ciclo em show_if: a -> b -> a"),
+]
+
+AVISOS_STEP = [
+    (_HDR + "#@step a\n#@timeout abc\na() { :; }\n",
+     [(4, "#@timeout 'abc' inválido; step sem timeout")]),
+    (_HDR + "#@step a\n#@timeout 0\na() { :; }\n",
+     [(4, "#@timeout 0 precisa ser > 0; step sem timeout")]),
+    (_HDR + "#@step a\n#@on_error talvez\na() { :; }\n",
+     [(4, "#@on_error 'talvez' inválido (use stop|continue); usando 'stop'")]),
+    (_HDR + "#@step a\n#@default talvez\na() { :; }\n",
+     [(4, "#@default 'talvez' inválido (use on|off)")]),
+]
+
+
+@pytest.mark.parametrize(("text", "exc_type", "line", "message"), ERROS_STEP_E_CICLO)
+def test_erro_de_step_e_ciclo_com_mensagem_exata(text: str, exc_type: type, line, message: str) -> None:
+    with pytest.raises(exc_type) as exc:
+        parse_text(text, Path("t.sh"))
+    assert exc.value.diagnostic.message == message
+    assert exc.value.diagnostic.line == line
+
+
+@pytest.mark.parametrize(("text", "esperados"), AVISOS_STEP)
+def test_aviso_de_step_com_linha_exata(text: str, esperados: list) -> None:
+    result = parse_text(text, Path("t.sh"))
+    assert [(w.line, w.message) for w in result.warnings] == esperados
