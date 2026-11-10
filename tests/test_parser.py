@@ -302,7 +302,11 @@ def test_option_number_range_errors() -> None:
 
 
 def test_option_number_default_errors() -> None:
-    base = "#@runtime 1\n#@name T\n#@option n type=number label=N min=1 max=10 default=%%\n#@step s\ns() { :; }\n"
+    base = (
+        "#@runtime 1\n#@name T\n"
+        "#@option n type=number label=N min=1 max=10 default=%%\n"
+        "#@step s\ns() { :; }\n"
+    )
     for default in ("abc", "0", "99", "1,2"):
         with pytest.raises(ValidationError):
             parse(base.replace("%%", default))
@@ -378,7 +382,9 @@ def test_option_pattern_errors() -> None:
 
 def test_option_pattern_warns_on_other_types() -> None:
     result = parse_text(
-        "#@runtime 1\n#@name T\n#@option n type=number label=N pattern=x multiple=true\n#@step s\ns() { :; }\n",
+        "#@runtime 1\n#@name T\n"
+        "#@option n type=number label=N pattern=x multiple=true\n"
+        "#@step s\ns() { :; }\n",
         Path("test.sh"),
     )
     messages = [warning.message for warning in result.warnings]

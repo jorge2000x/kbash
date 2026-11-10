@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -68,8 +69,8 @@ def test_multi_answer_format() -> None:
 def bash(script: str, stdin: str = "", env_extra: dict[str, str] | None = None):
     env = dict(os.environ)
     env.update(env_extra or {})
-    return subprocess.run(
-        ["bash", "-c", script],
+    return subprocess.run(  # noqa: S603 - argv fixo, sem shell
+        ["bash", "-c", script],  # noqa: S607 - bash do PATH de teste
         input=stdin,
         capture_output=True,
         text=True,
@@ -143,8 +144,8 @@ def test_helper_fallback_fail_exits_1() -> None:
 
 
 def test_helper_set_and_get_without_runtime() -> None:
-    result = bash(f'source {HELPERS}; rt_set repo_dir /tmp/x; echo "$RT_VAR_REPO_DIR $(rt_get repo_dir)"')
-    assert result.stdout == "/tmp/x /tmp/x\n"
+    result = bash(f'source {HELPERS}; rt_set repo_dir /srv/x; echo "$RT_VAR_REPO_DIR $(rt_get repo_dir)"')
+    assert result.stdout == "/srv/x /srv/x\n"
 
 
 def test_helper_truncates_long_text() -> None:
@@ -160,18 +161,23 @@ def test_helper_has_no_external_dependencies() -> None:
     for forbidden in ("jq", "python", "perl", "node", "gawk", "awk"):
         assert forbidden not in code, forbidden
     # e funciona com um PATH mínimo
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - argv fixo, sem shell
         [shutil.which("bash") or "/bin/bash", "-c", f"source {HELPERS}; rt_progress 10 ok"],
         capture_output=True,
         text=True,
-        env={"PATH": "/nonexistent", "HOME": os.environ.get("HOME", "/tmp")},
+        env={"PATH": "/nonexistent", "HOME": os.environ.get("HOME", "/")},
         check=False,
     )
     assert result.returncode == 0, result.stderr
 
 
 def test_helper_syntax_is_valid() -> None:
-    result = subprocess.run(["bash", "-n", str(HELPERS)], capture_output=True, text=True, check=False)
+    result = subprocess.run(  # noqa: S603 - argv fixo, sem shell
+        ["bash", "-n", str(HELPERS)],  # noqa: S607 - bash do PATH de teste
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 0, result.stderr
 
 
@@ -226,11 +232,10 @@ def test_runtime_dir_is_0700_and_removed(tmp_path: Path, monkeypatch: pytest.Mon
 
 def test_secret_is_input_with_secret_flag() -> None:
     """§8.2 — rt_secret manda t="input" com secret=true (não existe t="secret")."""
-    from kbash.core.events import PromptRequest
     from kbash.core.ipc import IpcChannel
 
     prompts: list[PromptRequest] = []
-    channel = IpcChannel(Path("/tmp"), prompts.append, "teste-secret")
+    channel = IpcChannel(Path(tempfile.gettempdir()), prompts.append, "teste-secret")
     try:
         worker = threading.Thread(
             target=lambda: bash(
@@ -257,7 +262,7 @@ def test_unknown_message_with_id_gets_cancel() -> None:
     from kbash.core.ipc import IpcChannel
 
     events: list[object] = []
-    channel = IpcChannel(Path("/tmp"), events.append, "teste-desconhecido")
+    channel = IpcChannel(Path(tempfile.gettempdir()), events.append, "teste-desconhecido")
     try:
         writer = os.open(str(channel.out_path), os.O_RDWR)
         os.write(writer, b'{"t":"inventado","id":"r42"}\n')
@@ -273,7 +278,6 @@ def test_new_prompt_kinds_reach_runtime() -> None:
     import threading
     import time
 
-    from kbash.core.events import PromptRequest
     from kbash.core.ipc import IpcChannel
 
     cases = [
@@ -286,10 +290,10 @@ def test_new_prompt_kinds_reach_runtime() -> None:
     ]
     for command, kind in cases:
         prompts: list[PromptRequest] = []
-        channel = IpcChannel(Path("/tmp"), prompts.append, f"teste-{kind}")
+        channel = IpcChannel(Path(tempfile.gettempdir()), prompts.append, f"teste-{kind}")
         try:
             worker = threading.Thread(
-                target=lambda: bash(
+                target=lambda command=command, channel=channel: bash(  # B023: valor do laço
                     f"source {HELPERS}; {command} >/dev/null",
                     env_extra={"RT_IPC": str(channel.directory)},
                 ),
@@ -325,8 +329,8 @@ def test_helper_fallback_number_date_time() -> None:
 
 
 def test_helper_fallback_file_text_textbox() -> None:
-    picked = bash(f'source {HELPERS}; rt_file "Foto" "" "*.png"', stdin="/tmp/foto.png\n")
-    assert picked.stdout == "/tmp/foto.png"
+    picked = bash(f'source {HELPERS}; rt_file "Foto" "" "*.png"', stdin="/srv/foto.png\n")
+    assert picked.stdout == "/srv/foto.png"
     text = bash(f'source {HELPERS}; rt_text "Notas"', stdin="linha 1\nlinha 2\n.\n")
     assert text.stdout == "linha 1\nlinha 2"
     box = bash(f'source {HELPERS}; rt_textbox "Aviso" "leia isto"; echo FIM', stdin="\n")
@@ -343,7 +347,7 @@ def test_progresswin_is_fire_and_forget() -> None:
     from kbash.core.ipc import IpcChannel
 
     events: list = []
-    channel = IpcChannel(Path("/tmp"), events.append, "teste-progresswin")
+    channel = IpcChannel(Path(tempfile.gettempdir()), events.append, "teste-progresswin")
     try:
         worker = threading.Thread(
             target=lambda: bash(
