@@ -10,6 +10,7 @@
 // Cores: fundo = `faint(tom)`, texto = tom. `muted` é o tom apagado — um
 // selo sem severidade, não um aviso.
 import QtQuick
+import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 
 Rectangle {
@@ -37,7 +38,7 @@ Rectangle {
     // selo nunca rouba o foco do conteúdo da linha
     activeFocusOnTab: false
 
-    Text {
+    Label {
         id: label
         anchors.centerIn: parent
         text: root.text

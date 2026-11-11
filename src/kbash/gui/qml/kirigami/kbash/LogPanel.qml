@@ -51,7 +51,7 @@ Rectangle {
             width: view.width
             implicitHeight: textLabel.implicitHeight
 
-            Text {
+            Label {
                 id: textLabel
                 text: line.stepId !== "" ? "[" + line.stepId + "] " + line.text : line.text
                 color: line.stream === "stderr" ? theme.logError

@@ -553,7 +553,7 @@ class Bridge(QObject):
             self.notifyRaised.emit(f"não consegui excluir a predefinição: {exc}", "error")
             return False
         self._reload_presets()
-        self.notifyRaised.emit(f"predefinição apagada: {name}", "info")
+        self.notifyRaised.emit(f"predefinição excluída: {name}", "info")
         return True
 
     @Slot()

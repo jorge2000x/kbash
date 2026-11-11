@@ -49,7 +49,9 @@ ToolBar {
 
         // botão voltar (fluxo linear): mesmo efeito do item Exibir > Voltar
         AppButton {
-            text: ""
+            // só ícone: o texto vira o nome acessível (leitor de tela) e o tooltip
+            text: qsTr("Voltar")
+            display: AbstractButton.IconOnly
             iconGlyph: "go-previous"
             variant: "flat"
             visible: bridge.page > 0
@@ -61,7 +63,8 @@ ToolBar {
 
         // gaveta de log (§10.2.5): abre/fecha sem painel fixo
         AppButton {
-            text: ""
+            text: qsTr("Log da execução")
+            display: AbstractButton.IconOnly
             iconGlyph: "utilities-log-viewer"
             variant: "flat"
             Layout.alignment: Qt.AlignVCenter
