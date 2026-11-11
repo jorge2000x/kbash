@@ -163,56 +163,21 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    // -- avisos como toast (rt_notify / §9.2) --------------------------
-    Rectangle {
-        id: toast
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: theme.largeSpacing * 3
-        width: Math.min(toastText.implicitWidth + 32, window.width - 60)
-        height: toastText.implicitHeight + 20
-        radius: theme.cornerRadius
-        opacity: 0
-        visible: opacity > 0
-        // fundo no `surface` e texto na cor do nível: pintar o fundo com a
-        // cor de texto do nível deixava o branco ilegível no tema escuro.
-        color: theme.surface
-        border.width: 1
-        border.color: theme.hairline(theme.onSurface(toast.level))
-
-        property string level: "info"
-
-        Behavior on opacity { NumberAnimation { duration: 180 } }
-
-        Timer {
-            id: toastTimer
-            interval: 4000
-            onTriggered: toast.opacity = 0
-        }
-
-        function show(text, level) {
-            toastText.text = text
-            toast.level = level || "info"
-            toast.opacity = 1
-            toastTimer.restart()
-        }
-
-        Label {
-            id: toastText
-            anchors.centerIn: parent
-            width: toast.width - 32
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
-            color: theme.onSurface(toast.level)
-        }
-    }
-
+    // -- avisos (rt_notify / §9.2, fim de execução, exclusão) -------------
+    // Notificação passiva do Kirigami (HIG: avisos que não pedem decisão).
+    // Erro e aviso ficam mais tempo na tela; o sucesso e a informação saem rápido.
     Connections {
         target: bridge
-        function onNotifyRaised(text, level) { toast.show(text, level) }
+        function onNotifyRaised(text, level) {
+            window.showPassiveNotification(text, level === "error" || level === "warn" ? "long" : "short")
+        }
         function onRunFinishedSignal(status, message) {
-            toast.show(message, status === "failed" ? "error"
-                              : status === "cancelled" ? "warn" : "success")
+            window.showPassiveNotification(message, status === "failed" || status === "cancelled" ? "long" : "short")
+        }
+        // "Desfazer" reverte a exclusão de predefinição (bridge.undoDeletePreset)
+        function onPresetDeleted(name) {
+            window.showPassiveNotification(qsTr("Predefinição excluída: %1").arg(name), "long",
+                qsTr("Desfazer"), function () { bridge.undoDeletePreset() })
         }
     }
 

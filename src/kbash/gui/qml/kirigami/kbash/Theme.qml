@@ -2,7 +2,7 @@
 //
 // Regra: o app NÃO tem paleta própria. As cores saem do Kirigami, que já
 // segue o tema do sistema, e o Breeze desenha os controles com a paleta dele.
-// Painéis desenhados à mão (toast, selo, log) usam as funções daqui para
+// Painéis desenhados à mão (selo, log) usam as funções daqui para
 // combinar com essa paleta em vez de inventar cor.
 import QtQuick
 import org.kde.kirigami as Kirigami
