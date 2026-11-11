@@ -680,7 +680,9 @@ def test_root_steps_are_flagged_without_asking_privileges(app) -> None:
     application.processEvents()
 
 
-def test_save_log(app, tmp_path: Path) -> None:
+def test_save_log(app, tmp_path: Path, fake_pkexec_on_path) -> None:
+    # DEV_SETUP tem um step #@root: com a elevação ligada (§9.2) o precheck exige pkexec.
+    # O pkexec falso do conftest torna o teste independente do polkit do host.
     application, engine, _roots = create_engine(DEV_SETUP)
     bridge = answer_prompts(engine.rootContext().contextProperty("bridge"), True)
     bridge.setOption("user_name", "Ana")
@@ -1657,12 +1659,14 @@ def test_portal_full_loop_without_ui(app, tmp_path: Path, monkeypatch) -> None:
     exercita subscribe (match rule em path falso é aceita no bus),
     roteamento e parsing da resposta.
     """
-    from PySide6.QtDBus import QDBusMessage, QDBusObjectPath
+    from PySide6.QtDBus import QDBusConnection, QDBusMessage, QDBusObjectPath
 
     import kbash.gui.bridge as bmod
     from kbash.core.parser import parse_script
     from kbash.gui.bridge import Bridge
 
+    if not QDBusConnection.sessionBus().isConnected():
+        pytest.skip("sem barramento de sessão: rode sob dbus-run-session (tools/gui-completo.sh)")
     PATH = "/org/test/fakereq9"
     monkeypatch.setattr(bmod, "_portal_service_available", lambda: True)
 
@@ -1722,7 +1726,7 @@ def test_portal_response_uint32_reaches_slot_over_bus(app, tmp_path: Path, monke
     import shutil
     import subprocess
 
-    from PySide6.QtDBus import QDBusMessage, QDBusObjectPath
+    from PySide6.QtDBus import QDBusConnection, QDBusMessage, QDBusObjectPath
 
     import kbash.gui.bridge as bmod
     from kbash.core.parser import parse_script
@@ -1730,6 +1734,8 @@ def test_portal_response_uint32_reaches_slot_over_bus(app, tmp_path: Path, monke
 
     if shutil.which("gdbus") is None:
         pytest.skip("gdbus indisponível: sem barramento para o teste")
+    if not QDBusConnection.sessionBus().isConnected():
+        pytest.skip("sem barramento de sessão: rode sob dbus-run-session (tools/gui-completo.sh)")
     PATH = "/org/test/uint32req"
     monkeypatch.setattr(bmod, "_portal_service_available", lambda: True)
 
