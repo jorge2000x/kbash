@@ -168,6 +168,21 @@ class _Pending:
         self.done = threading.Event()
 
 
+def _bases_do_ipc() -> list[Path]:
+    """XDG_RUNTIME_DIR (se definido) e depois o temporário do sistema."""
+    bases = [Path(xdg)] if (xdg := os.environ.get("XDG_RUNTIME_DIR")) else []
+    bases.append(Path(tempfile.gettempdir()))
+    return bases
+
+
+def _criar_dir_em(base: Path, owner: str) -> Path:
+    base.mkdir(parents=True, exist_ok=True)
+    ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
+    ipc_dir.mkdir(mode=0o700)
+    os.chmod(ipc_dir, 0o700)  # recém-criado por nós: não é um alvo de symlink
+    return ipc_dir
+
+
 class IpcChannel:
     """Fifos da execução (§8.1). Usado pelo executor via ``ipc_factory``."""
 
@@ -207,27 +222,19 @@ class IpcChannel:
         como symlink plantado em ``/tmp``), a criação falha em vez de reutilizar
         ou alterar o alvo. Nomes únicos por execução evitam que duas execuções
         simultâneas do mesmo script apaguem os FIFOs uma da outra.
+
+        Tenta ``XDG_RUNTIME_DIR`` e depois o temporário do sistema. Colisão de
+        nome é erro imediato, não motivo para trocar de lugar.
         """
-        # XDG_RUNTIME_DIR primeiro; se não aceitar escrita, o temporário do sistema
-        # (tempfile respeita TMPDIR). Colisão de nome é erro, não motivo para trocar.
-        candidatos = [Path(xdg)] if (xdg := os.environ.get("XDG_RUNTIME_DIR")) else []
-        candidatos.append(Path(tempfile.gettempdir()))
         motivos: list[str] = []
-        for base in candidatos:
+        for base in _bases_do_ipc():
             try:
-                base.mkdir(parents=True, exist_ok=True)
-                ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
-                ipc_dir.mkdir(mode=0o700)
+                return _criar_dir_em(base, owner)
             except FileExistsError:
                 raise IpcError(f"diretório de IPC já existe: {base}") from None
             except OSError as exc:
-                motivos.append(f"{base}: {exc.strerror or exc}")
-                continue
-            break
-        else:
-            raise IpcError("nenhum diretório gravável para o IPC (" + "; ".join(motivos) + ")")
-        os.chmod(ipc_dir, 0o700)  # recém-criado por nós: não é um alvo de symlink
-        return ipc_dir
+                motivos.append(f"{base}: {exc}")
+        raise IpcError("nenhum diretório gravável para o IPC (" + "; ".join(motivos) + ")")
 
     def close(self) -> None:
         """§7.4 — prompts pendentes recebem ``cancel`` ao encerrar."""

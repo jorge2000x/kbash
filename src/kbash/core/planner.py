@@ -371,6 +371,32 @@ def option_visible(
     return True
 
 
+def _ocultar_ate_estabilizar(
+    script: Script, values: dict[str, str], selected: Collection[str] | None
+) -> None:
+    """Opção oculta volta ao default, até não mudar mais nada (ponto fixo).
+
+    Esconder uma opção pode esconder outra que dependia dela, e isso não pode
+    depender da ordem de declaração. Cada opção oculta muda uma vez, então o
+    laço termina.
+    """
+    mudou = True
+    while mudou:
+        mudou = False
+        for option in value_options(script):
+            if not _oculta(script, values, option, selected):
+                continue
+            padrao = option.default or ""
+            if values.get(option.id, "") != padrao:
+                values[option.id] = padrao
+                mudou = True
+
+
+def _oculta(script: Script, values: dict[str, str], option: Option, selected: Collection[str] | None) -> bool:
+    condicionada = option.show_if or option.needs_step is not None
+    return bool(condicionada) and not option_visible(script, values, option, selected)
+
+
 def validate_options(
     script: Script,
     values: dict[str, str],
@@ -382,20 +408,7 @@ def validate_options(
     Opção oculta (por ``show_if`` ou ``needs_step``) volta ao ``default``.
     """
     values = dict(values)
-    # ponto fixo: esconder uma opção pode esconder outra que dependia dela, e
-    # isso não pode depender da ordem de declaração. Cada opção oculta só muda
-    # uma vez (vai para o default), então o laço termina.
-    mudou = True
-    while mudou:
-        mudou = False
-        for option in value_options(script):
-            if (option.show_if or option.needs_step is not None) and not option_visible(
-                script, values, option, selected
-            ):
-                padrao = option.default or ""
-                if values.get(option.id, "") != padrao:
-                    values[option.id] = padrao
-                    mudou = True
+    _ocultar_ate_estabilizar(script, values, selected)
     errors = option_errors(script, values, selected)
     if errors:
         raise ValidationError("; ".join(f"{key}: {msg}" for key, msg in errors.items()), script.path, None)
