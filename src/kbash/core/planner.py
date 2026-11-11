@@ -19,9 +19,11 @@ __all__ = [
     "default_selection",
     "dependents",
     "expand_value",
+    "normalize_options",
     "option_errors",
     "option_visible",
     "resolve",
+    "resolve_visibility",
     "set_checked",
     "validate_options",
     "value_options",
@@ -371,15 +373,16 @@ def option_visible(
     return True
 
 
-def _ocultar_ate_estabilizar(
+def resolve_visibility(
     script: Script, values: dict[str, str], selected: Collection[str] | None
-) -> None:
-    """Opção oculta volta ao default, até não mudar mais nada (ponto fixo).
+) -> dict[str, str]:
+    """Etapa 2 do plano: opção oculta volta ao default, até não mudar mais nada.
 
-    Esconder uma opção pode esconder outra que dependia dela, e isso não pode
-    depender da ordem de declaração. Cada opção oculta muda uma vez, então o
-    laço termina.
+    Devolve um dicionário novo. Esconder uma opção pode esconder outra que
+    dependia dela, e isso não pode depender da ordem de declaração. Cada opção
+    oculta muda uma vez, então o laço termina. Aplicar de novo não muda nada.
     """
+    values = dict(values)
     mudou = True
     while mudou:
         mudou = False
@@ -390,6 +393,7 @@ def _ocultar_ate_estabilizar(
             if values.get(option.id, "") != padrao:
                 values[option.id] = padrao
                 mudou = True
+    return values
 
 
 def _oculta(script: Script, values: dict[str, str], option: Option, selected: Collection[str] | None) -> bool:
@@ -407,13 +411,21 @@ def validate_options(
 
     Opção oculta (por ``show_if`` ou ``needs_step``) volta ao ``default``.
     """
-    values = dict(values)
-    _ocultar_ate_estabilizar(script, values, selected)
-    errors = option_errors(script, values, selected)
+    visiveis = resolve_visibility(script, values, selected)
+    errors = option_errors(script, visiveis, selected)
     if errors:
         raise ValidationError("; ".join(f"{key}: {msg}" for key, msg in errors.items()), script.path, None)
-    return {option.id: expand_value(values.get(option.id, ""), home) if option.type in ("path", "file")
-            else values.get(option.id, "") for option in value_options(script)}
+    return normalize_options(script, visiveis, home)
+
+
+def normalize_options(script: Script, values: dict[str, str], home: str | None = None) -> dict[str, str]:
+    """Etapa 3 do plano: expande ``~`` em opções de caminho; o resto passa como está."""
+    return {
+        option.id: expand_value(values.get(option.id, ""), home)
+        if option.type in ("path", "file")
+        else values.get(option.id, "")
+        for option in value_options(script)
+    }
 
 
 def build_plan(
