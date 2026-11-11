@@ -329,17 +329,20 @@ def _read_text(path: Path) -> str:
     and all(a.timeout > 0 for a in result.script.actions),
     "timeout é nulo ou positivo",
 )
-def parse_text(text: str, path: Path | None = None) -> ParseResult:
+def parse_text(text: str, path: Path | None = None, sha256: str | None = None) -> ParseResult:
     """Parseia o conteúdo de um script (sem tocar no disco além do nome).
+
+    ``sha256`` é o hash do arquivo bruto (``sha256_of``). Sem ele, o hash é o do
+    ``text`` como foi dado, shebang incluído.
 
     :raises ParseError: sintaxe ou diretiva inválida, com linha (§4.6).
     :raises ValidationError: referência inexistente, id duplicado, ciclo etc. (§4.6).
     """
+    digest = sha256 if sha256 is not None else hashlib.sha256(text.encode("utf-8")).hexdigest()
     if text.startswith("#!"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
     parser = _Parser(text, path)
     parser.parse()
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     script = parser.build(path or Path("<script>"), digest)
     return ParseResult(script=script, warnings=tuple(parser.diag.warnings), source=text)
 
@@ -351,7 +354,7 @@ def parse_script(path: Path) -> Script:
     ``cwd=$HOME`` (§7.1), então um caminho relativo quebraria o ``source``.
     """
     path = Path(path).expanduser().resolve()
-    return parse_text(_read_text(path), path).script
+    return parse_text(_read_text(path), path, sha256=sha256_of(path)).script
 
 
 def check_script(path: Path) -> tuple[Script | None, Diagnostics]:
