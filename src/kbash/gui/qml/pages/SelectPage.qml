@@ -32,7 +32,7 @@ AppPage {
             onActivated: bridge.loadPreset(currentText)
         }
         AppButton {
-            text: qsTr("Apagar")
+            text: qsTr("Excluir")
             enabled: presetBox.currentIndex >= 0
             onClicked: {
                 bridge.deletePreset(presetBox.currentText)

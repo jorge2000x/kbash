@@ -550,7 +550,7 @@ class Bridge(QObject):
             del presets[name]
             write_presets(self._script.id, presets)
         except (PresetError, OSError) as exc:
-            self.notifyRaised.emit(f"não consegui apagar a predefinição: {exc}", "error")
+            self.notifyRaised.emit(f"não consegui excluir a predefinição: {exc}", "error")
             return False
         self._reload_presets()
         self.notifyRaised.emit(f"predefinição apagada: {name}", "info")
