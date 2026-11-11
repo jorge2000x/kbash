@@ -981,106 +981,127 @@ class Bridge(QObject):
             self._apply(event)
 
     def _apply(self, event: Event) -> None:
-        match event:
-            case RunStarted():
-                self._workdir = event.workdir
-                self.workdirChanged.emit()
-                self.runStartedSignal.emit()
-            case StepStarted():
-                self._current_step = event.step_id
-                self._current_title = self._steps_model.title(event.step_id)
-                self._step_progress = 0.0
-                self._step_progress_text = ""
-                self._steps_model.set_status(event.step_id, StepState.RUNNING.value)
-                self.stepStateChanged.emit(event.step_id, StepState.RUNNING.value)
-                self.currentStepTitleChanged.emit()
-                self.stepProgressChanged.emit()
-            case StepFinished():
-                self._completed += 1
-                self._steps_model.set_status(event.step_id, event.status.value, event.duration, event.reason)
-                self.stepStateChanged.emit(event.step_id, event.status.value)
-                self._overall = self._ratio()
-                self._step_progress = 1.0 if event.status is StepState.SUCCESS else self._step_progress
-                self.overallProgressChanged.emit()
-                self.stepProgressChanged.emit()
-                self.canRetryChanged.emit()
-            case LogLine():
-                self._log_model.push(event.text, event.stream, event.level, event.step_id or "")
-            case Progress():
-                self._step_progress = float(event.overall or 0.0)
-                self._step_progress_text = event.text
-                self._overall = self._ratio()
-                self.stepProgressChanged.emit()
-                self.stepProgressTextChanged.emit()
-                self.overallProgressChanged.emit()
-                self.progressSignal.emit(self._step_progress, event.text)
-            case PromptRequest():
-                self._ask_ui(event)
-            case Notify():
-                self.notifyRaised.emit(event.text, event.level)
-            case ProgressWin():
-                before = (
-                    self._progress_win_visible, self._progress_win_maximum,
-                    self._progress_win_value, self._progress_win_text,
-                )
-                if event.op == "start":
-                    maximum = event.maximum if event.maximum else 100.0
-                    self._progress_win_visible = True
-                    self._progress_win_maximum = maximum if maximum > 0 else 100.0
-                    self._progress_win_value = max(0.0, min(event.value, self._progress_win_maximum))
-                    self._progress_win_text = event.text
-                elif event.op == "done":
-                    self._progress_win_visible = False
-                else:
-                    if event.maximum:
-                        self._progress_win_maximum = event.maximum if event.maximum > 0 else 100.0
-                    self._progress_win_value = max(0.0, min(event.value, self._progress_win_maximum))
-                    self._progress_win_text = event.text or self._progress_win_text
-                after = (
-                    self._progress_win_visible, self._progress_win_maximum,
-                    self._progress_win_value, self._progress_win_text,
-                )
-                if after != before:
-                    if after[0] != before[0]:
-                        self.progressWinVisibleChanged.emit()
-                    self.progressWinChanged.emit()
-            case RunFinished():
-                self._overall = self._ratio()
-                self.overallProgressChanged.emit()
-            case _RunDone():
-                self._log_model.flush()  # o log final aparece de uma vez
-                self.logCountChanged.emit()
-                self._running = False
-                self.runningChanged.emit()
-                # a janela de progresso do script não sobrevive ao fim
-                if self._progress_win_visible:
-                    self._progress_win_visible = False
-                    self.progressWinVisibleChanged.emit()
-                self._result_status = event.status.value
-                self._result_message = self._summarize(event.status, event.steps)
-                self.resultStatusChanged.emit()
-                self.resultMessageChanged.emit()
-                self.canRetryChanged.emit()
-                self._set_page(PAGE_RESULT)
-                self.runFinishedSignal.emit(event.status.value, self._result_message)
-            case _PrecheckFailed():
-                self._running = False
-                self.runningChanged.emit()
-                self.notifyRaised.emit(event.message, "error")
-                self._set_page(PAGE_SELECT)
-                self.precheckProblemsChanged.emit()
-            case _RunCrashed():
-                self._log_model.flush()
-                self.logCountChanged.emit()
-                self._running = False
-                self.runningChanged.emit()
-                self._result_status = RunState.FAILED.value
-                self._result_message = event.message
-                self.resultStatusChanged.emit()
-                self.resultMessageChanged.emit()
-                self.canRetryChanged.emit()
-                self._set_page(PAGE_RESULT)
-                self.runFinishedSignal.emit(RunState.FAILED.value, event.message)
+        # Despacho por tipo exato (os eventos não têm subclasses): cada tipo tem um método.
+        nome = _DESPACHO_DE_EVENTO.get(type(event))
+        if nome is not None:
+            getattr(self, nome)(event)
+
+    def _on_run_started(self, event: RunStarted) -> None:
+        self._workdir = event.workdir
+        self.workdirChanged.emit()
+        self.runStartedSignal.emit()
+
+    def _on_step_started(self, event: StepStarted) -> None:
+        self._current_step = event.step_id
+        self._current_title = self._steps_model.title(event.step_id)
+        self._step_progress = 0.0
+        self._step_progress_text = ""
+        self._steps_model.set_status(event.step_id, StepState.RUNNING.value)
+        self.stepStateChanged.emit(event.step_id, StepState.RUNNING.value)
+        self.currentStepTitleChanged.emit()
+        self.stepProgressChanged.emit()
+
+    def _on_step_finished(self, event: StepFinished) -> None:
+        self._completed += 1
+        self._steps_model.set_status(event.step_id, event.status.value, event.duration, event.reason)
+        self.stepStateChanged.emit(event.step_id, event.status.value)
+        self._overall = self._ratio()
+        self._step_progress = 1.0 if event.status is StepState.SUCCESS else self._step_progress
+        self.overallProgressChanged.emit()
+        self.stepProgressChanged.emit()
+        self.canRetryChanged.emit()
+
+    def _on_log_line(self, event: LogLine) -> None:
+        self._log_model.push(event.text, event.stream, event.level, event.step_id or "")
+
+    def _on_progress(self, event: Progress) -> None:
+        self._step_progress = float(event.overall or 0.0)
+        self._step_progress_text = event.text
+        self._overall = self._ratio()
+        self.stepProgressChanged.emit()
+        self.stepProgressTextChanged.emit()
+        self.overallProgressChanged.emit()
+        self.progressSignal.emit(self._step_progress, event.text)
+
+    def _on_prompt(self, event: PromptRequest) -> None:
+        self._ask_ui(event)
+
+    def _on_notify(self, event: Notify) -> None:
+        self.notifyRaised.emit(event.text, event.level)
+
+    def _on_progress_win(self, event: ProgressWin) -> None:
+        antes = self._estado_da_janela()
+        if event.op == "start":
+            self._janela_inicia(event)
+        elif event.op == "done":
+            self._progress_win_visible = False
+        else:
+            self._janela_atualiza(event)
+        depois = self._estado_da_janela()
+        if depois != antes:
+            if depois[0] != antes[0]:
+                self.progressWinVisibleChanged.emit()
+            self.progressWinChanged.emit()
+
+    def _estado_da_janela(self) -> tuple[bool, float, float, str]:
+        return (
+            self._progress_win_visible, self._progress_win_maximum,
+            self._progress_win_value, self._progress_win_text,
+        )
+
+    def _janela_inicia(self, event: ProgressWin) -> None:
+        maximo = event.maximum if event.maximum else 100.0
+        self._progress_win_visible = True
+        self._progress_win_maximum = maximo if maximo > 0 else 100.0
+        self._progress_win_value = max(0.0, min(event.value, self._progress_win_maximum))
+        self._progress_win_text = event.text
+
+    def _janela_atualiza(self, event: ProgressWin) -> None:
+        if event.maximum:
+            self._progress_win_maximum = event.maximum if event.maximum > 0 else 100.0
+        self._progress_win_value = max(0.0, min(event.value, self._progress_win_maximum))
+        self._progress_win_text = event.text or self._progress_win_text
+
+    def _on_run_finished(self, event: RunFinished) -> None:
+        self._overall = self._ratio()
+        self.overallProgressChanged.emit()
+
+    def _on_run_done(self, event: _RunDone) -> None:
+        self._log_model.flush()  # o log final aparece de uma vez
+        self.logCountChanged.emit()
+        self._running = False
+        self.runningChanged.emit()
+        # a janela de progresso do script não sobrevive ao fim
+        if self._progress_win_visible:
+            self._progress_win_visible = False
+            self.progressWinVisibleChanged.emit()
+        self._result_status = event.status.value
+        self._result_message = self._summarize(event.status, event.steps)
+        self.resultStatusChanged.emit()
+        self.resultMessageChanged.emit()
+        self.canRetryChanged.emit()
+        self._set_page(PAGE_RESULT)
+        self.runFinishedSignal.emit(event.status.value, self._result_message)
+
+    def _on_precheck_failed(self, event: _PrecheckFailed) -> None:
+        self._running = False
+        self.runningChanged.emit()
+        self.notifyRaised.emit(event.message, "error")
+        self._set_page(PAGE_SELECT)
+        self.precheckProblemsChanged.emit()
+
+    def _on_run_crashed(self, event: _RunCrashed) -> None:
+        self._log_model.flush()
+        self.logCountChanged.emit()
+        self._running = False
+        self.runningChanged.emit()
+        self._result_status = RunState.FAILED.value
+        self._result_message = event.message
+        self.resultStatusChanged.emit()
+        self.resultMessageChanged.emit()
+        self.canRetryChanged.emit()
+        self._set_page(PAGE_RESULT)
+        self.runFinishedSignal.emit(RunState.FAILED.value, event.message)
 
     def _ratio(self) -> float:
         if not self._total:
@@ -1236,6 +1257,23 @@ class _RunCrashed:
 
     def __init__(self, message: str) -> None:
         self.message = message
+
+
+#: Tipo de evento → método de ``Bridge`` que o aplica (ver ``Bridge._apply``).
+_DESPACHO_DE_EVENTO: dict[type, str] = {
+    RunStarted: "_on_run_started",
+    StepStarted: "_on_step_started",
+    StepFinished: "_on_step_finished",
+    LogLine: "_on_log_line",
+    Progress: "_on_progress",
+    PromptRequest: "_on_prompt",
+    Notify: "_on_notify",
+    ProgressWin: "_on_progress_win",
+    RunFinished: "_on_run_finished",
+    _RunDone: "_on_run_done",
+    _PrecheckFailed: "_on_precheck_failed",
+    _RunCrashed: "_on_run_crashed",
+}
 
 
 def load_bridge(script_path: Path, assets: Path | None = None) -> Bridge:
