@@ -149,6 +149,12 @@ Kirigami.ApplicationWindow {
         id: logDrawer
     }
 
+    // Ctrl+Q: atalho padrão de sair (HIG do KDE); fecha pela mesma via do X
+    Shortcut {
+        sequence: StandardKey.Quit
+        onActivated: window.close()
+    }
+
     Shortcut {
         sequence: "Ctrl+L"
         onActivated: bridge.logDrawerOpen = !bridge.logDrawerOpen

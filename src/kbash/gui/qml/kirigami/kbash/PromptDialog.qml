@@ -144,7 +144,7 @@ AppDialog {
             selectByMouse: true
             wrapMode: TextEdit.WordWrap
             font.family: "monospace"
-            font.pixelSize: 12
+            font.pointSize: Kirigami.Theme.defaultFont.pointSize
             color: theme.text
             width: parent.width
             text: root.promptText
