@@ -382,11 +382,20 @@ def validate_options(
     Opção oculta (por ``show_if`` ou ``needs_step``) volta ao ``default``.
     """
     values = dict(values)
-    for option in value_options(script):
-        if (option.show_if or option.needs_step is not None) and not option_visible(
-            script, values, option, selected
-        ):
-            values[option.id] = option.default or ""
+    # ponto fixo: esconder uma opção pode esconder outra que dependia dela, e
+    # isso não pode depender da ordem de declaração. Cada opção oculta só muda
+    # uma vez (vai para o default), então o laço termina.
+    mudou = True
+    while mudou:
+        mudou = False
+        for option in value_options(script):
+            if (option.show_if or option.needs_step is not None) and not option_visible(
+                script, values, option, selected
+            ):
+                padrao = option.default or ""
+                if values.get(option.id, "") != padrao:
+                    values[option.id] = padrao
+                    mudou = True
     errors = option_errors(script, values, selected)
     if errors:
         raise ValidationError("; ".join(f"{key}: {msg}" for key, msg in errors.items()), script.path, None)
