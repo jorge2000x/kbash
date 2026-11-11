@@ -17,6 +17,7 @@ import json
 import os
 import re
 import secrets
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -207,15 +208,24 @@ class IpcChannel:
         ou alterar o alvo. Nomes únicos por execução evitam que duas execuções
         simultâneas do mesmo script apaguem os FIFOs uma da outra.
         """
-        # /tmp só sem XDG_RUNTIME_DIR: o mkdir sem exist_ok falha em qualquer
-        # caminho já existente (inclusive symlink plantado), então não há reuso
-        base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")  # noqa: S108
-        base.mkdir(parents=True, exist_ok=True)
-        ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
-        try:
-            ipc_dir.mkdir(mode=0o700)
-        except FileExistsError:
-            raise IpcError(f"diretório de IPC já existe: {ipc_dir}") from None
+        # XDG_RUNTIME_DIR primeiro; se não aceitar escrita, o temporário do sistema
+        # (tempfile respeita TMPDIR). Colisão de nome é erro, não motivo para trocar.
+        candidatos = [Path(xdg)] if (xdg := os.environ.get("XDG_RUNTIME_DIR")) else []
+        candidatos.append(Path(tempfile.gettempdir()))
+        motivos: list[str] = []
+        for base in candidatos:
+            try:
+                base.mkdir(parents=True, exist_ok=True)
+                ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
+                ipc_dir.mkdir(mode=0o700)
+            except FileExistsError:
+                raise IpcError(f"diretório de IPC já existe: {base}") from None
+            except OSError as exc:
+                motivos.append(f"{base}: {exc.strerror or exc}")
+                continue
+            break
+        else:
+            raise IpcError("nenhum diretório gravável para o IPC (" + "; ".join(motivos) + ")")
         os.chmod(ipc_dir, 0o700)  # recém-criado por nós: não é um alvo de symlink
         return ipc_dir
 
