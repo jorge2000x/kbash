@@ -162,6 +162,17 @@ def test_qml_module_is_declared() -> None:
         assert f"{component} 1.0" in text, component
 
 
+MEDIR_LARGURA_DO_CARTAO = """(function w(it, d) {
+  if (!it || d > 40) return 0;
+  var m = (it.content !== undefined && it.subtitle !== undefined && it.visible) ? it.width : 0;
+  for (var i = 0; i < it.children.length; i++) {
+    var k = w(it.children[i], d + 1);
+    if (k > m) m = k;
+  }
+  return m;
+})(contentItem, 0)"""
+
+
 def test_pages_fill_the_window_width(gui) -> None:
     """Regressão de layout: os cartões ficavam na largura do conteúdo.
 
@@ -172,26 +183,20 @@ def test_pages_fill_the_window_width(gui) -> None:
     Qt.AlignHCenter` na coluna (faz o Layout medir pelo conteúdo) e a
     `ApplicationWindow` sem `ColumnLayout` ancorada em volta do conteúdo.
     """
-    from PySide6.QtQuick import QQuickItem
+    from PySide6.QtQml import QQmlExpression
 
-    _app, _engine, roots, bridge = gui
+    _app, engine, roots, bridge = gui
     bridge.goToPage(1)
     assert spin(_app, lambda: bridge.page == 1)
 
+    # A medição roda no QML. Percorrer QQuickItem pelo Python e chamar metaObject() nos
+    # itens do Kirigami derrubava o processo (SIGSEGV no PySide6 6.10). Um AppCard é
+    # reconhecido pelas propriedades `content` (default alias) e `subtitle`.
+    medir = QQmlExpression(engine.rootContext(), roots[0], MEDIR_LARGURA_DO_CARTAO)
+
     def widest_card() -> int:
-        widest = 0
-
-        def walk(item: object, depth: int = 0) -> None:
-            nonlocal widest
-            if depth > 40 or not isinstance(item, QQuickItem):
-                return
-            if "AppCard_QMLTYPE" in item.metaObject().className() and item.isVisible():
-                widest = max(widest, int(item.width()))
-            for child in item.childItems():
-                walk(child, depth + 1)
-
-        walk(roots[0].property("contentItem"))
-        return widest
+        largura, _ok = medir.evaluate()
+        return int(largura)
 
     assert spin(_app, lambda: widest_card() > 0), "nenhum cartão visível"
     window_width = int(roots[0].property("width"))
