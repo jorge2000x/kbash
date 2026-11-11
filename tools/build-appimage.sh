@@ -19,6 +19,10 @@ REPO="${1:?uso: build-appimage.sh <repo> <saida.AppImage>}"
 SAIDA="${2:?uso: build-appimage.sh <repo> <saida.AppImage>}"
 VENV="${VENV:-/tmp/venv}"
 DEBS="${DEBS:-/tmp/debs/x}"
+# Python de onde sai o binário e a stdlib do AppDir. O padrão é o da máquina Ubuntu;
+# no runner do GitHub o gui-completo.sh passa o do próprio venv (setup-python).
+PY_BIN="${PY_BIN:-/usr/bin/python3.11}"
+PY_STD="${PY_STD:-/usr/lib/python3.11}"
 BUILD="${BUILD:-/tmp/appdir}"
 SP="$VENV/lib/python3.11/site-packages"
 # O Qt do PySide6 TEM de ser o mesmo dos pacotes Ubuntu (6.10.2), senão os
@@ -40,11 +44,11 @@ log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 # ---------------------------------------------------------------------------
 log "Python (binário estático: não precisa de libpython.so)"
 rm -rf "$BUILD"; mkdir -p "$APP/bin" "$APP/lib/python3.11"
-cp /usr/bin/python3.11 "$APP/bin/python3"
+cp "$PY_BIN" "$APP/bin/python3"
 ln -sf python3 "$APP/bin/python"
 
 log "stdlib do Python, podada (§A2.3/A2.4)"
-cp -a /usr/lib/python3.11/. "$APP/lib/python3.11/"
+cp -a "$PY_STD/." "$APP/lib/python3.11/"
 find "$APP/lib/python3.11" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 find "$APP/lib/python3.11" -name '*.pyc' -delete 2>/dev/null || true
 

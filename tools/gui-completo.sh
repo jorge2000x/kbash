@@ -13,6 +13,10 @@ set -euo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 PY="${PYTHON:-python3}"
+# O build copia o Python e a stdlib do interpretador deste venv (no runner, não há
+# /usr/bin/python3.11). readlink segue o symlink até o binário real.
+export PY_BIN="${PY_BIN:-$(readlink -f "$PY")}"
+export PY_STD="${PY_STD:-$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["stdlib"])')}"
 SAIDA="${SAIDA:-$RAIZ/dist-gui}"
 mkdir -p "$SAIDA"
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
