@@ -199,6 +199,15 @@ def _flag(value: str | None, default: bool = True) -> bool:
     return _bool(value, default)
 
 
+def _lista_separada_por_virgula(raw: str | None) -> tuple[str, ...]:
+    """``choices=`` e ``filters=``: itens separados por vírgula, sem vazios nem espaços."""
+    return tuple(
+        part.strip()
+        for part in _unquote((raw or "").strip()).split(",")
+        if part.strip()
+    )
+
+
 class _Parser:
     def __init__(self, text: str, path: Path | None) -> None:
         self.text = text
@@ -460,85 +469,24 @@ class _Parser:
         return options
 
     def _build_option(self, block: _Block) -> Option:
-        path = self.path
-        kind = (block.get("type") or "string").strip() or "string"
-        if kind not in OPTION_TYPES:
-            self.diag.warning(
-                f"type={kind!r} desconhecido em #@option {block.id!r}; usando 'string'",
-                block.attr_line("type"),
-            )
-            kind = "string"
+        # A ordem dos avisos e do primeiro erro é o contrato: cada passo fica na sequência.
+        kind = self._tipo_da_opcao(block)
         label = _unquote((block.get("label") or block.id).strip())
         default_raw = block.get("default")
         default = _unquote(default_raw.strip()) if default_raw is not None else None
-        choices_raw = block.get("choices")
-        choices = tuple(
-            part.strip()
-            for part in _unquote((choices_raw or "").strip()).split(",")
-            if part.strip()
-        )
+        choices = _lista_separada_por_virgula(block.get("choices"))
         required = _flag(block.get("required"), False)
-        help_text = " ".join(_tokenize(block.get("help") or "", block.line, path))
+        help_text = " ".join(_tokenize(block.get("help") or "", block.line, self.path))
         if kind in NON_VALUE_TYPES:
-            # §4.3: só exibem texto/link; não têm valor, então saem antes das
-            # checagens de valor (default, faixa, pattern…)
-            url = self._check_display_option(block, kind)
-            if kind == "link":
-                label = _unquote((block.get("label") or url).strip())
-            return Option(
-                id=block.id,
-                type=kind,
-                label=label,
-                help=help_text,
-                group=self._parse_group(block),
-                url=url,
-                show_if=self._parse_show_if(block),
-                needs_step=self._parse_needs_step(block),
-                line=block.line,
-            )
-        if kind in ("choice", "multi"):
-            if not choices:
-                self._error(
-                    f"#@option {block.id!r} type={kind} exige choices", block.line
-                )
-            if default and default not in choices:
-                self._error(
-                    f"default={default!r} de #@option {block.id!r} não está em choices"
-                    f" ({', '.join(choices)})",
-                    block.attr_line("default"),
-                )
-        if kind == "bool" and default is not None and default.strip().lower() not in TRUTHY | FALSY:
-            self.diag.warning(
-                f"default={default!r} de #@option {block.id!r} (bool) não é booleano",
-                block.attr_line("default"),
-            )
-        if required and kind == "bool":
-            self.diag.warning(
-                f"#@option {block.id!r} é required mas do tipo bool", block.attr_line("required")
-            )
+            return self._opcao_de_exibicao(block, kind, label, help_text)
+        self._checar_escolhas(block, kind, default, choices)
+        self._avisar_bool(block, kind, default, required)
         minimum, maximum, step = self._parse_range(block, kind)
-        filters = tuple(
-            part.strip()
-            for part in _unquote((block.get("filters") or "").strip()).split(",")
-            if part.strip()
-        )
-        if filters and kind != "file":
-            self.diag.warning(
-                f"filters de #@option {block.id!r} só vale para type=file",
-                block.attr_line("filters"),
-            )
+        filters = _lista_separada_por_virgula(block.get("filters"))
+        self._avisar_filters(block, kind, filters)
         if kind in ("number", "slider"):
             self._check_numeric_default(block, default, minimum, maximum)
-        if kind == "date" and default and not is_valid_date(default):
-            self._error(
-                f"default={default!r} de #@option {block.id!r} não é data ISO (AAAA-MM-DD)",
-                block.attr_line("default"),
-            )
-        if kind == "time" and default and not is_valid_time(default):
-            self._error(
-                f"default={default!r} de #@option {block.id!r} não é hora (HH:MM)",
-                block.attr_line("default"),
-            )
+        self._checar_data_e_hora(block, kind, default)
         pattern, minlen, maxlen, multiple = self._parse_text_checks(block, kind, default)
         show_if = self._parse_show_if(block)
         return Option(
@@ -562,6 +510,82 @@ class _Parser:
             group=self._parse_group(block),
             line=block.line,
         )
+
+    def _tipo_da_opcao(self, block: _Block) -> str:
+        """``type=`` da opção; tipo desconhecido vira ``string`` com aviso."""
+        kind = (block.get("type") or "string").strip() or "string"
+        if kind not in OPTION_TYPES:
+            self.diag.warning(
+                f"type={kind!r} desconhecido em #@option {block.id!r}; usando 'string'",
+                block.attr_line("type"),
+            )
+            return "string"
+        return kind
+
+    def _opcao_de_exibicao(
+        self, block: _Block, kind: str, label: str, help_text: str
+    ) -> Option:
+        """§4.3: paragraph/link só exibem texto; não têm valor, então pulam as checagens."""
+        url = self._check_display_option(block, kind)
+        if kind == "link":
+            label = _unquote((block.get("label") or url).strip())
+        return Option(
+            id=block.id,
+            type=kind,
+            label=label,
+            help=help_text,
+            group=self._parse_group(block),
+            url=url,
+            show_if=self._parse_show_if(block),
+            needs_step=self._parse_needs_step(block),
+            line=block.line,
+        )
+
+    def _checar_escolhas(
+        self, block: _Block, kind: str, default: str | None, choices: tuple[str, ...]
+    ) -> None:
+        if kind not in ("choice", "multi"):
+            return
+        if not choices:
+            self._error(f"#@option {block.id!r} type={kind} exige choices", block.line)
+        if default and default not in choices:
+            self._error(
+                f"default={default!r} de #@option {block.id!r} não está em choices"
+                f" ({', '.join(choices)})",
+                block.attr_line("default"),
+            )
+
+    def _avisar_bool(
+        self, block: _Block, kind: str, default: str | None, required: bool
+    ) -> None:
+        if kind == "bool" and default is not None and default.strip().lower() not in TRUTHY | FALSY:
+            self.diag.warning(
+                f"default={default!r} de #@option {block.id!r} (bool) não é booleano",
+                block.attr_line("default"),
+            )
+        if required and kind == "bool":
+            self.diag.warning(
+                f"#@option {block.id!r} é required mas do tipo bool", block.attr_line("required")
+            )
+
+    def _avisar_filters(self, block: _Block, kind: str, filters: tuple[str, ...]) -> None:
+        if filters and kind != "file":
+            self.diag.warning(
+                f"filters de #@option {block.id!r} só vale para type=file",
+                block.attr_line("filters"),
+            )
+
+    def _checar_data_e_hora(self, block: _Block, kind: str, default: str | None) -> None:
+        if kind == "date" and default and not is_valid_date(default):
+            self._error(
+                f"default={default!r} de #@option {block.id!r} não é data ISO (AAAA-MM-DD)",
+                block.attr_line("default"),
+            )
+        if kind == "time" and default and not is_valid_time(default):
+            self._error(
+                f"default={default!r} de #@option {block.id!r} não é hora (HH:MM)",
+                block.attr_line("default"),
+            )
 
     def _parse_group(self, block: _Block) -> str | None:
         """§4.8.1 — ``group=`` da opção geral. Com ``needs_step`` vira aviso e é ignorado."""
