@@ -1199,32 +1199,49 @@ def _option_field(app, tmp_path: Path, **props: object):
         engine, QUrl.fromLocalFile(str(qml_dir() / "kirigami" / "kbash" / "OptionField.qml"))
     )
     _KEEPALIVE.append((engine, bridge, theme, component))
+    # Sem PySide tipando o item (na primeira criação do processo ele vem como QObject),
+    # tudo é feito por propriedades do QML: setProperty e as buscas são expressões JS.
     field = component.create()
     assert field is not None, [error.toString() for error in component.errors()]
+    _KEEPALIVE.append(field)
     for key, value in props.items():
         field.setProperty(key, value)
-    # Sem largura, o layout do Kirigami não gera os filhos (campos ficam fora da árvore).
-    # Na app o OptionField sempre vive numa página com largura; aqui damos uma explícita.
+    # Os layouts do Kirigami só fazem polish dentro de uma janela: sem ela os filhos do
+    # OptionField nunca são gerados. Pendura o campo numa QQuickView e dá uma largura.
+    from PySide6.QtQuick import QQuickView
+
+    janela = QQuickView(engine, None)
+    _KEEPALIVE.append(janela)
+    field.setProperty("parent", janela.contentItem())
     field.setProperty("width", 400)
     return field
 
 
+#: Campos de texto visíveis dentro do OptionField. O AppTextField é alias do TextField do
+#: Kirigami (qmldir), então o discriminador é o que um TextField tem: echoMode e placeholderText.
+_CAMPOS_DE_TEXTO = """(function (raiz) {
+  var achados = [];
+  function walk(it, d) {
+    if (!it || d > 20) return;
+    if (it.echoMode !== undefined && it.placeholderText !== undefined && it.visible) {
+      achados.push(it);
+    }
+    for (var i = 0; i < it.children.length; i++) walk(it.children[i], d + 1);
+  }
+  walk(raiz, 0);
+  return achados;
+})(this)"""
+
+
 def _visible_text_fields(field: object) -> list:
-    """AppTextFields visíveis dentro do OptionField."""
-    from PySide6.QtQuick import QQuickItem
+    """AppTextFields visíveis dentro do OptionField, medidos no QML."""
+    from PySide6.QtQml import QJSValue, QQmlEngine, QQmlExpression
 
-    found: list = []
-
-    def walk(item: object, depth: int = 0) -> None:
-        if depth > 20 or not isinstance(item, QQuickItem):
-            return
-        if "AppTextField_QMLTYPE" in item.metaObject().className() and item.property("visible"):
-            found.append(item)
-        for child in item.childItems():
-            walk(child, depth + 1)
-
-    walk(field)
-    return found
+    expressao = QQmlExpression(QQmlEngine.contextForObject(field), field, _CAMPOS_DE_TEXTO)
+    valor, _ok = expressao.evaluate()
+    if isinstance(valor, QJSValue):
+        valor = valor.toVariant()
+    return list(valor) if valor else []
 
 
 def test_option_number_renders_validated_field(app, tmp_path: Path) -> None:
@@ -1791,22 +1808,34 @@ def test_portal_response_uint32_reaches_slot_over_bus(app, tmp_path: Path, monke
         bridge.shutdown()
         app.processEvents()
 
+#: Itens visíveis cujo `text` é o pedido, medidos no QML (sem metaObject do Python).
+_TEXTO_VISIVEL = """(function (raiz, texto) {
+  var achados = [];
+  function walk(it, d) {
+    if (!it || d > 20) return;
+    if (it.text === texto && it.visible) achados.push(it);
+    for (var i = 0; i < it.children.length; i++) walk(it.children[i], d + 1);
+  }
+  walk(raiz, 0);
+  return achados;
+})(this, __TEXTO__)"""
+
+
 def _visible_with_text(field: object, text: str) -> list:
     """Itens visíveis dentro do OptionField cujo `text` é o dado (§4.3 paragraph/link)."""
-    from PySide6.QtQuick import QQuickItem
+    import json
 
-    found: list = []
+    from PySide6.QtQml import QJSValue, QQmlEngine, QQmlExpression
 
-    def walk(item: object, depth: int = 0) -> None:
-        if depth > 20 or not isinstance(item, QQuickItem):
-            return
-        if item.property("text") == text and item.property("visible"):
-            found.append(item)
-        for child in item.childItems():
-            walk(child, depth + 1)
-
-    walk(field)
-    return found
+    expressao = QQmlExpression(
+        QQmlEngine.contextForObject(field),
+        field,
+        _TEXTO_VISIVEL.replace("__TEXTO__", json.dumps(text)),
+    )
+    valor, _ok = expressao.evaluate()
+    if isinstance(valor, QJSValue):
+        valor = valor.toVariant()
+    return list(valor) if valor else []
 
 
 def test_option_paragraph_shows_text_and_no_opt_row(app, tmp_path: Path) -> None:
