@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 
 from .contratos import ensure, require
@@ -241,6 +241,95 @@ def default_options(script: Script, home: str | None = None) -> dict[str, str]:
     return values
 
 
+_BOOLEANOS = ("0", "1", "true", "false", "on", "off", "yes", "no")
+
+
+def _erro_de_escolha(option: Option, value: str) -> str | None:
+    escolhidos = (
+        [item.strip() for item in str(value).split(",")]
+        if option.type == "multi"
+        else [str(value)]
+    )
+    for item in escolhidos:
+        if item and item not in option.choices:
+            esperados = ", ".join(option.choices)
+            return f"valor inválido {item!r} (esperado um de: {esperados})"
+    return None
+
+
+def _erro_de_booleano(option: Option, value: str) -> str | None:
+    if str(value).lower() not in _BOOLEANOS:
+        return "use 0/1 para booleano"
+    return None
+
+
+def _erro_de_numero(option: Option, value: str) -> str | None:
+    texto = str(value)
+    if not is_valid_number(texto):
+        return f"valor {texto!r} não é número"
+    numero = float(texto)
+    if option.minimum not in (None, "") and numero < float(option.minimum):
+        return f"valor {texto!r} abaixo de min={option.minimum!r}"
+    if option.maximum not in (None, "") and numero > float(option.maximum):
+        return f"valor {texto!r} acima de max={option.maximum!r}"
+    return None
+
+
+def _erro_de_data(option: Option, value: str) -> str | None:
+    texto = str(value)
+    if not is_valid_date(texto):
+        return f"data {texto!r} inválida (use AAAA-MM-DD)"
+    return None
+
+
+def _erro_de_hora(option: Option, value: str) -> str | None:
+    texto = str(value)
+    if not is_valid_time(texto):
+        return f"hora {texto!r} inválida (use HH:MM)"
+    return None
+
+
+def _erro_de_texto(option: Option, value: str) -> str | None:
+    texto = str(value)
+    if option.pattern:
+        try:
+            casa = re.fullmatch(option.pattern, texto) is not None
+        except re.error:
+            casa = True
+        if not casa:
+            return f"valor {texto!r} não casa com pattern"
+    if option.minlen is not None and len(texto) < int(option.minlen):
+        return f"valor menor que minlen={option.minlen!r}"
+    if option.maxlen is not None and len(texto) > int(option.maxlen):
+        return f"valor maior que maxlen={option.maxlen!r}"
+    return None
+
+
+#: Tipo → validador do valor não vazio. Tipo sem entrada aqui não tem regra de valor.
+_VALIDADORES: dict[str, Callable[[Option, str], str | None]] = {
+    "choice": _erro_de_escolha,
+    "multi": _erro_de_escolha,
+    "bool": _erro_de_booleano,
+    "number": _erro_de_numero,
+    "slider": _erro_de_numero,
+    "date": _erro_de_data,
+    "time": _erro_de_hora,
+    "string": _erro_de_texto,
+    "password": _erro_de_texto,
+    "text": _erro_de_texto,
+}
+
+
+def _erro_do_valor(option: Option, value: str) -> str | None:
+    """Mensagem de erro de um valor (já sem espaços nas pontas), ou ``None``."""
+    if option.required and not value:
+        return "campo obrigatório"
+    if not value:
+        return None
+    validador = _VALIDADORES.get(option.type)
+    return validador(option, value) if validador is not None else None
+
+
 def option_errors(
     script: Script, values: dict[str, str], selected: Collection[str] | None = None
 ) -> dict[str, str]:
@@ -251,54 +340,10 @@ def option_errors(
             continue
         raw = values.get(option.id, "")
         value = raw.strip() if isinstance(raw, str) else raw
-        if option.required and not value:
-            errors[option.id] = "campo obrigatório"
-            continue
-        if not value:
-            continue
-        if option.type in ("choice", "multi"):
-            chosen = (
-                [item.strip() for item in str(value).split(",")]
-                if option.type == "multi"
-                else [str(value)]
-            )
-            for item in chosen:
-                if item and item not in option.choices:
-                    expected = ", ".join(option.choices)
-                    errors[option.id] = f"valor inválido {item!r} (esperado um de: {expected})"
-                    break
-        booleans = ("0", "1", "true", "false", "on", "off", "yes", "no")
-        if option.type == "bool" and str(value).lower() not in booleans:
-            errors[option.id] = "use 0/1 para booleano"
-        if option.type in ("number", "slider"):
-            if not is_valid_number(str(value)):
-                errors[option.id] = f"valor {str(value)!r} não é número"
-            else:
-                number = float(str(value))
-                if option.minimum not in (None, "") and number < float(option.minimum):
-                    errors[option.id] = f"valor {str(value)!r} abaixo de min={option.minimum!r}"
-                elif option.maximum not in (None, "") and number > float(option.maximum):
-                    errors[option.id] = f"valor {str(value)!r} acima de max={option.maximum!r}"
-        if option.type == "date" and not is_valid_date(str(value)):
-            errors[option.id] = f"data {str(value)!r} inválida (use AAAA-MM-DD)"
-        if option.type == "time" and not is_valid_time(str(value)):
-            errors[option.id] = f"hora {str(value)!r} inválida (use HH:MM)"
-        if option.type in ("string", "password", "text"):
-            text = str(value)
-            if option.pattern:
-                try:
-                    matched = re.fullmatch(option.pattern, text) is not None
-                except re.error:
-                    matched = True
-                if not matched:
-                    errors[option.id] = f"valor {text!r} não casa com pattern"
-                    continue
-            if option.minlen is not None and len(text) < int(option.minlen):
-                errors[option.id] = f"valor menor que minlen={option.minlen!r}"
-            elif option.maxlen is not None and len(text) > int(option.maxlen):
-                errors[option.id] = f"valor maior que maxlen={option.maxlen!r}"
+        mensagem = _erro_do_valor(option, value)
+        if mensagem is not None:
+            errors[option.id] = mensagem
     return errors
-
 
 def option_visible(
     script: Script,
