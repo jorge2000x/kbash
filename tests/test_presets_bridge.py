@@ -168,3 +168,21 @@ def test_preset_file_is_valid_json_with_only_text_values(app, tmp_path: Path, ho
     bridge.savePreset("Teste")
     data = json.loads((home / "kbash-config" / "backup.json").read_text(encoding="utf-8"))
     assert all(isinstance(v, str) for values in data.values() for v in values.values())
+
+
+def test_undo_restores_the_deleted_preset(app, tmp_path: Path, home: Path) -> None:
+    bridge = _bridge(tmp_path, app)
+    bridge.savePreset("Um")
+    bridge.savePreset("Dois")
+    assert bridge.deletePreset("Um") is True
+    assert bridge.undoDeletePreset() is True
+    assert list(bridge.property("presetNames")) == ["Dois", "Um"]
+    # só existe um desfazer por vez: depois de desfeito, não há mais nada
+    assert bridge.undoDeletePreset() is False
+
+
+def test_undo_without_a_delete_does_nothing(app, tmp_path: Path, home: Path) -> None:
+    bridge = _bridge(tmp_path, app)
+    bridge.savePreset("Um")
+    assert bridge.undoDeletePreset() is False
+    assert list(bridge.property("presetNames")) == ["Um"]
