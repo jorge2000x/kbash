@@ -375,19 +375,18 @@ def test_theme_follows_the_system_palette(app) -> None:
         assert QColor(theme.property(role)).lightnessF() != log_base.lightnessF(), role
 
 
-def test_toast_never_paints_fixed_white_on_a_saturated_background() -> None:
-    """Regressão de contraste: o toast pinava o fundo com a cor do nível.
+def test_avisos_usam_a_notificacao_passiva_do_kirigami() -> None:
+    """Avisos saem pela notificação passiva da janela, não por um toast próprio.
 
-    As cores de texto do Kirigami são escuras no tema claro e claras no
-    escuro; usá-las como fundo com `#ffffff` por cima deixava o texto
-    ilegível justamente no tema escuro. O fundo é `surface` e o texto é a cor
-    do nível, pelas duas pontas da paleta.
+    A HIG do KDE pede `showPassiveNotification` para avisos que não exigem
+    decisão. O toast próprio pintava texto por nível (erro, aviso, sucesso);
+    a notificação do Kirigami não tem nível, então essa diferenciação por cor
+    sai. A mensagem continua no texto, e o `level` vai ao log.
     """
     main = (qml_dir() / "main.qml").read_text(encoding="utf-8")
-    toast = main[main.index("id: toast") :]
-    assert "theme.onSurface(toast.level)" in toast, "o toast precisa pintar o texto pelo nível"
-    assert 'color: theme.surface' in toast, "o fundo do toast não pode ser a cor do nível"
-    assert "#ffffff" not in toast and "#000000" not in toast, "cor fixa no toast"
+    assert "id: toast" not in main, "o toast próprio deve sair"
+    assert "function show(" not in main, "o toast próprio deve sair"
+    assert main.count("window.showPassiveNotification(") >= 2, "avisos sem notificação passiva"
 
 
 def test_log_model_streams_are_distinguished(gui) -> None:
