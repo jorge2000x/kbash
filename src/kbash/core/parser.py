@@ -763,44 +763,8 @@ class _Parser:
         maxlen = _unquote(raw_maxlen.strip()) if raw_maxlen is not None else None
         multiple = _flag(block.get("multiple"), False)
         if kind in ("string", "password", "text"):
-            if pattern:
-                try:
-                    re.compile(pattern)
-                except re.error as exc:
-                    self._error(
-                        f"pattern={pattern!r} de #@option {block.id!r} é regex inválida: {exc}",
-                        block.attr_line("pattern"),
-                    )
-                else:
-                    if default and not re.fullmatch(pattern, default):
-                        self._error(
-                            f"default={default!r} de #@option {block.id!r} não casa com pattern",
-                            block.attr_line("default"),
-                        )
-            for name, bound in (("minlen", minlen), ("maxlen", maxlen)):
-                if bound is not None and (not bound.isdigit() or int(bound) < 0):
-                    self._error(
-                        f"{name}={bound!r} de #@option {block.id!r} precisa ser inteiro >= 0",
-                        block.attr_line(name),
-                    )
-            if (minlen is not None and maxlen is not None
-                    and minlen.isdigit() and maxlen.isdigit()
-                    and int(minlen) > int(maxlen)):
-                self._error(
-                    f"minlen={minlen!r} maior que maxlen={maxlen!r} em #@option {block.id!r}",
-                    block.attr_line("minlen"),
-                )
-            if default:
-                if minlen is not None and minlen.isdigit() and len(default) < int(minlen):
-                    self._error(
-                        f"default de #@option {block.id!r} menor que minlen={minlen!r}",
-                        block.attr_line("default"),
-                    )
-                if maxlen is not None and maxlen.isdigit() and len(default) > int(maxlen):
-                    self._error(
-                        f"default de #@option {block.id!r} maior que maxlen={maxlen!r}",
-                        block.attr_line("default"),
-                    )
+            self._checar_pattern(block, pattern, default)
+            self._checar_limites_de_texto(block, minlen, maxlen, default)
         else:
             if raw_pattern is not None or raw_minlen is not None or raw_maxlen is not None:
                 self.diag.warning(
@@ -815,6 +779,64 @@ class _Parser:
             )
             multiple = False
         return pattern, minlen, maxlen, multiple
+
+    def _checar_pattern(self, block: _Block, pattern: str, default: str | None) -> None:
+        """A regex compila e, se houver `default`, ele casa com ela."""
+        if not pattern:
+            return
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            self._error(
+                f"pattern={pattern!r} de #@option {block.id!r} é regex inválida: {exc}",
+                block.attr_line("pattern"),
+            )
+        if default and not re.fullmatch(pattern, default):
+            self._error(
+                f"default={default!r} de #@option {block.id!r} não casa com pattern",
+                block.attr_line("default"),
+            )
+
+    def _checar_limites_de_texto(
+        self,
+        block: _Block,
+        minlen: str | None,
+        maxlen: str | None,
+        default: str | None,
+    ) -> None:
+        """`minlen`/`maxlen` são inteiros >= 0, min <= max, e o `default` cabe neles."""
+        self._checar_tamanhos(block, minlen, maxlen)
+        if default:
+            self._checar_default_no_tamanho(block, default, minlen, maxlen)
+
+    def _checar_tamanhos(self, block: _Block, minlen: str | None, maxlen: str | None) -> None:
+        for name, bound in (("minlen", minlen), ("maxlen", maxlen)):
+            if bound is not None and (not bound.isdigit() or int(bound) < 0):
+                self._error(
+                    f"{name}={bound!r} de #@option {block.id!r} precisa ser inteiro >= 0",
+                    block.attr_line(name),
+                )
+        if (minlen is not None and maxlen is not None
+                and minlen.isdigit() and maxlen.isdigit()
+                and int(minlen) > int(maxlen)):
+            self._error(
+                f"minlen={minlen!r} maior que maxlen={maxlen!r} em #@option {block.id!r}",
+                block.attr_line("minlen"),
+            )
+
+    def _checar_default_no_tamanho(
+        self, block: _Block, default: str, minlen: str | None, maxlen: str | None
+    ) -> None:
+        if minlen is not None and minlen.isdigit() and len(default) < int(minlen):
+            self._error(
+                f"default de #@option {block.id!r} menor que minlen={minlen!r}",
+                block.attr_line("default"),
+            )
+        if maxlen is not None and maxlen.isdigit() and len(default) > int(maxlen):
+            self._error(
+                f"default de #@option {block.id!r} maior que maxlen={maxlen!r}",
+                block.attr_line("default"),
+            )
 
     def _build_steps(self) -> list[Step]:
         steps: list[Step] = []
