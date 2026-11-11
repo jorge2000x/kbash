@@ -389,6 +389,23 @@ def test_avisos_usam_a_notificacao_passiva_do_kirigami() -> None:
     assert main.count("window.showPassiveNotification(") >= 2, "avisos sem notificação passiva"
 
 
+def test_janela_lembra_tamanho_e_posicao() -> None:
+    """A HIG pede que a janela volte ao tamanho e à posição em que foi fechada.
+
+    A geometria vai para um `Settings` do QtCore (por usuário, no
+    `QSettings` do sistema). Ao fechar ela é gravada; ao abrir é restaurada.
+    """
+    main = (qml_dir() / "main.qml").read_text(encoding="utf-8")
+    assert "import QtCore" in main, "falta o QtCore para o Settings"
+    settings = main[main.index("Settings {") :]
+    for chave in ("largura", "altura", "posX", "posY"):
+        assert chave in main, f"geometria sem {chave}"
+    assert "geometria.largura = window.width" in main, "fechar não grava a largura"
+    assert "geometria.posX = window.x" in main, "fechar não grava a posição"
+    assert "window.width = geometria.largura" in main, "abrir não restaura a largura"
+    assert "settings" in settings.lower() or "geometria" in settings
+
+
 def test_log_model_streams_are_distinguished(gui) -> None:
     _app, _engine, _roots, bridge = gui
     model = bridge.log
