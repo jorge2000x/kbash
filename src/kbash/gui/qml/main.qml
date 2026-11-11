@@ -8,6 +8,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtCore
 import pages
 import org.kde.kirigami as Kirigami
 import kbash
@@ -21,6 +22,27 @@ Kirigami.ApplicationWindow {
     minimumHeight: 480
     visible: true
     title: bridge.scriptName
+
+    // -- geometria da janela (HIG: a janela volta como foi fechada) ------
+    // Gravada ao fechar, restaurada ao abrir. O Qt limita o tamanho ao mínimo.
+    Settings {
+        id: geometria
+        category: "janela"
+        property int largura: 940
+        property int altura: 700
+        property int posX: 0
+        property int posY: 0
+        property bool temPosicao: false
+    }
+
+    Component.onCompleted: {
+        window.width = geometria.largura
+        window.height = geometria.altura
+        if (geometria.temPosicao) {
+            window.x = geometria.posX
+            window.y = geometria.posY
+        }
+    }
 
     // a barra da janela (§10.2): ícone, título e subtítulo
     header: AppHeader {
@@ -186,5 +208,12 @@ Kirigami.ApplicationWindow {
         id: logDrawer
     }
 
-    onClosing: bridge.shutdown()
+    onClosing: {
+        geometria.largura = window.width
+        geometria.altura = window.height
+        geometria.posX = window.x
+        geometria.posY = window.y
+        geometria.temPosicao = true
+        bridge.shutdown()
+    }
 }
