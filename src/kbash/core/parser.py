@@ -179,6 +179,11 @@ def _unquote(value: str) -> str:
     return value[1:-1] if len(value) >= 2 and value[0] == value[-1] == '"' else value
 
 
+def _sem_aspas(raw: str | None) -> str | None:
+    """Valor de atributo sem espaços e aspas (ou ``None`` se o atributo não existe)."""
+    return _unquote(raw.strip()) if raw is not None else None
+
+
 def _bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
@@ -686,29 +691,46 @@ class _Parser:
 
         O `slider` sem faixa usa `0`/`100`/`1` (SPEC.md §4.3).
         """
-        raw_min = block.get("min")
-        raw_max = block.get("max")
-        raw_step = block.get("step")
-        minimum = _unquote(raw_min.strip()) if raw_min is not None else None
-        maximum = _unquote(raw_max.strip()) if raw_max is not None else None
-        step = _unquote(raw_step.strip()) if raw_step is not None else None
-        if kind == "slider":
-            minimum = minimum if minimum not in (None, "") else "0"
-            maximum = maximum if maximum not in (None, "") else "100"
-            step = step if step not in (None, "") else "1"
         if kind not in ("number", "slider"):
-            if raw_min is not None or raw_max is not None or raw_step is not None:
-                self.diag.warning(
-                    f"min/max/step de #@option {block.id!r} só vale para type=number/slider",
-                    block.line,
-                )
+            self._avisar_faixa_sem_uso(block)
             return None, None, None
+        minimum, maximum, step = self._faixa_crua(block, kind)
+        self._checar_formato_da_faixa(block, minimum, maximum, step)
+        self._checar_ordem_da_faixa(block, minimum, maximum, step)
+        return minimum or None, maximum or None, step or None
+
+    def _avisar_faixa_sem_uso(self, block: _Block) -> None:
+        if any(block.get(name) is not None for name in ("min", "max", "step")):
+            self.diag.warning(
+                f"min/max/step de #@option {block.id!r} só vale para type=number/slider",
+                block.line,
+            )
+
+    @staticmethod
+    def _faixa_crua(block: _Block, kind: str) -> tuple[str | None, str | None, str | None]:
+        """Os três valores sem aspas; o `slider` sem faixa usa `0`/`100`/`1`."""
+        minimum = _sem_aspas(block.get("min"))
+        maximum = _sem_aspas(block.get("max"))
+        step = _sem_aspas(block.get("step"))
+        if kind == "slider":
+            minimum = minimum or "0"
+            maximum = maximum or "100"
+            step = step or "1"
+        return minimum, maximum, step
+
+    def _checar_formato_da_faixa(
+        self, block: _Block, minimum: str | None, maximum: str | None, step: str | None
+    ) -> None:
         for name, bound in (("min", minimum), ("max", maximum), ("step", step)):
             if bound not in (None, "") and not is_valid_number(bound):
                 self._error(
                     f"{name}={bound!r} de #@option {block.id!r} não é número",
                     block.attr_line(name),
                 )
+
+    def _checar_ordem_da_faixa(
+        self, block: _Block, minimum: str | None, maximum: str | None, step: str | None
+    ) -> None:
         if step not in (None, "") and float(step) <= 0:
             self._error(
                 f"step={step!r} de #@option {block.id!r} precisa ser > 0",
@@ -720,7 +742,6 @@ class _Parser:
                 f"min={minimum!r} maior que max={maximum!r} em #@option {block.id!r}",
                 block.attr_line("min"),
             )
-        return minimum or None, maximum or None, step or None
 
     def _check_numeric_default(
         self,
@@ -898,6 +919,30 @@ class _Parser:
         )
 
     def _build_step(self, block: _Block) -> Step:
+        # A ordem dos avisos e do primeiro erro é o contrato (caracterizado em
+        # tests/test_passos_e_faixas_tabela.py).
+        function = self._funcao_do_passo(block)
+        depends = self._depends_do_passo(block)
+        timeout = self._timeout_do_passo(block)
+        on_error = self._on_error_do_passo(block)
+        self._avisar_default_do_passo(block)
+        group_raw = block.get("group")
+        return Step(
+            id=block.id,
+            function=function,
+            title=_unquote((block.get("title") or block.id).strip()),
+            description="\n".join(part for part in block.descs if part),
+            group=_unquote(group_raw.strip()) if group_raw else None,
+            default=_flag(block.get("default")),
+            required=_flag(block.get("required"), False),
+            depends=depends,
+            root=_flag(block.get("root"), False),
+            timeout=timeout,
+            on_error=on_error,
+            line=block.line,
+        )
+
+    def _funcao_do_passo(self, block: _Block) -> str:
         function = (block.get("function") or block.id).strip()
         defined = block.attrs.get("__defined__")
         if function == block.id and defined is not None and defined != block.id:
@@ -911,9 +956,9 @@ class _Parser:
             self._error(
                 f"função {function!r} do step {block.id!r} não encontrada no script", block.line
             )
-        title = _unquote((block.get("title") or block.id).strip())
-        group = block.get("group")
-        group = _unquote(group.strip()) if group else None
+        return function
+
+    def _depends_do_passo(self, block: _Block) -> tuple[str, ...]:
         depends_raw = block.get("depends") or ""
         depends = tuple(
             item for item in (part.strip() for part in depends_raw.split(",")) if item
@@ -931,49 +976,44 @@ class _Parser:
                     message,  # pragma: no mutate
                     block.attr_line("depends"),  # pragma: no mutate
                 )
+        return depends
+
+    def _timeout_do_passo(self, block: _Block) -> int | None:
         timeout_raw = block.get("timeout")
-        timeout: int | None = None
-        if timeout_raw is not None:
-            try:
-                timeout = int(timeout_raw.strip())
-            except ValueError:
-                self.diag.warning(
-                    f"#@timeout {timeout_raw!r} inválido; step sem timeout",
-                    block.attr_line("timeout"),
-                )
-            else:
-                if timeout <= 0:
-                    self.diag.warning(
-                        f"#@timeout {timeout} precisa ser > 0; step sem timeout",
-                        block.attr_line("timeout"),
-                    )
-                    timeout = None
+        if timeout_raw is None:
+            return None
+        try:
+            timeout = int(timeout_raw.strip())
+        except ValueError:
+            self.diag.warning(
+                f"#@timeout {timeout_raw!r} inválido; step sem timeout",
+                block.attr_line("timeout"),
+            )
+            return None
+        if timeout <= 0:
+            self.diag.warning(
+                f"#@timeout {timeout} precisa ser > 0; step sem timeout",
+                block.attr_line("timeout"),
+            )
+            return None
+        return timeout
+
+    def _on_error_do_passo(self, block: _Block) -> str:
         on_error = (block.get("on_error") or "stop").strip() or "stop"
         if on_error not in ON_ERROR_VALUES:
             self.diag.warning(
                 f"#@on_error {on_error!r} inválido (use stop|continue); usando 'stop'",
                 block.attr_line("on_error"),
             )
-            on_error = "stop"
+            return "stop"
+        return on_error
+
+    def _avisar_default_do_passo(self, block: _Block) -> None:
         default_raw = block.get("default")
         if default_raw is not None and default_raw.strip().lower() not in TRUTHY | FALSY:
             self.diag.warning(
                 f"#@default {default_raw!r} inválido (use on|off)", block.attr_line("default")
             )
-        return Step(
-            id=block.id,
-            function=function,
-            title=title,
-            description="\n".join(part for part in block.descs if part),
-            group=group,
-            default=_flag(default_raw),
-            required=_flag(block.get("required"), False),
-            depends=depends,
-            root=_flag(block.get("root"), False),
-            timeout=timeout,
-            on_error=on_error,
-            line=block.line,
-        )
 
     def _check_show_if(self, options: list[Option]) -> None:
         """§4.3/§4.6: `show_if` só referencia opção existente, sem ciclo."""
