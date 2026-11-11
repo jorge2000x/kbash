@@ -9,7 +9,6 @@ Invariantes (SPEC.md §3/§7/§14):
 
 from __future__ import annotations
 
-import contextlib
 import os
 import secrets
 import shutil
@@ -33,7 +32,9 @@ from .events import (
     StepFinished,
     StepStarted,
 )
+from . import proc
 from .ipc import valid_var_key
+from .proc import GRACE_PERIOD
 from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
 
@@ -51,7 +52,6 @@ __all__ = [
 ]
 
 #: §7.4 — 5 s entre SIGTERM e SIGKILL.
-GRACE_PERIOD = 5.0
 
 #: §7.1 — comando de execução de um step.
 STEP_COMMAND = (
@@ -261,7 +261,7 @@ class Executor:
         with self._lock:
             process = self._process
         if process is not None and process.poll() is None:
-            self._signal_group(process, signal.SIGTERM)
+            proc.signal_group(process, signal.SIGTERM)
         ipc = self._ipc
         if ipc is not None:
             ipc.close()
@@ -350,15 +350,7 @@ class Executor:
             self._ipc.step_id = step.id
         self._emit(StepStarted(step.id, index, len(self.plan.selected)))
         try:
-            process = subprocess.Popen(  # noqa: S603 - argv em lista, sem shell
-                argv,
-                env=env,
-                cwd=cwd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
-            )
+            process = proc.start(argv, env=env, cwd=cwd)
         except (OSError, ValueError) as exc:  # ValueError: nome/valor de env inválido
             self._log(step.id, "kbash", f"não foi possível iniciar o step: {exc}", "error")
             return self._finish(step, StepState.FAILED, None, started, str(exc))
@@ -405,23 +397,9 @@ class Executor:
                 return self._terminate(process), "timeout"
 
     def _terminate(self, process: subprocess.Popen[bytes]) -> int | None:
-        """§7.4 — SIGTERM no grupo, SIGKILL depois de ``GRACE_PERIOD``."""
-        self._signal_group(process, signal.SIGTERM)
-        try:
-            return process.wait(timeout=GRACE_PERIOD)
-        except subprocess.TimeoutExpired:
-            self._signal_group(process, signal.SIGKILL)
-        try:
-            return process.wait(timeout=GRACE_PERIOD)
-        except subprocess.TimeoutExpired:
-            return None
+        """§7.4 — SIGTERM no grupo, SIGKILL depois de ``GRACE_PERIOD`` (core/proc.py)."""
+        return proc.stop(process, GRACE_PERIOD)
 
-    def _signal_group(self, process: subprocess.Popen[bytes], sig: int) -> None:
-        try:
-            os.killpg(os.getpgid(process.pid), sig)
-        except (ProcessLookupError, PermissionError, AttributeError):
-            with contextlib.suppress(ProcessLookupError, ValueError):
-                process.send_signal(sig)
 
     # -- ambiente e comando ---------------------------------------------
     def _build_env(self, step: Step) -> dict[str, str]:

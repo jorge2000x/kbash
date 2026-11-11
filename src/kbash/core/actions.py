@@ -8,7 +8,6 @@ plano, ``RunResult`` ou o log persistente.
 
 from __future__ import annotations
 
-import contextlib
 import os
 import signal
 import subprocess
@@ -25,6 +24,7 @@ from .executor import (
     STEP_COMMAND,
     default_root_command,
 )
+from . import proc
 from .model import Action, Script
 from .planner import default_options, expand_value, option_visible
 
@@ -163,15 +163,7 @@ def run_action(
         argv = root_command(argv, env, cwd)
     try:
         # argv em lista e sem shell (AGENTS.md); o comando root vem do pkexec, §9.2
-        process = subprocess.Popen(  # noqa: S603
-            argv,
-            cwd=cwd,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        process = proc.start(argv, env=env, cwd=cwd, merge_stderr=True)
     except (OSError, ValueError) as error:
         return ActionResult(action.id, "error", None, f"não foi possível iniciar: {error}")
 
@@ -180,11 +172,11 @@ def run_action(
         raw, _ = process.communicate(timeout=action.timeout)
     except subprocess.TimeoutExpired:
         status = "timeout"
-        _signal_group(process, signal.SIGTERM)
+        proc.signal_group(process, signal.SIGTERM)
         try:
             raw, _ = process.communicate(timeout=GRACE_PERIOD)
         except subprocess.TimeoutExpired:
-            _signal_group(process, signal.SIGKILL)
+            proc.signal_group(process, signal.SIGKILL)
             raw, _ = process.communicate()
     code = process.returncode
     if status == "ok" and code != 0:
@@ -196,8 +188,3 @@ def run_action(
         output=_tail(raw.decode("utf-8", errors="replace")),
         duration=time.monotonic() - started,
     )
-
-
-def _signal_group(process: subprocess.Popen[bytes], sig: int) -> None:
-    with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
-        os.killpg(process.pid, sig)
