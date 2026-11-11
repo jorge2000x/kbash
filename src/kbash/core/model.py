@@ -70,16 +70,16 @@ def slugify(name: str) -> str:
     return slug or "script"
 
 
+#: §4.3: inteiro ou decimal com sinal e expoente opcionais, só dígitos ASCII.
+_NUMERO_RE = re.compile(r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+
+
 def is_valid_number(value: str) -> bool:
     """§4.3: `number`/`slider` aceitam inteiro ou decimal finito (sem ``nan``, ``inf`` nem ``_``)."""
     texto = value.strip()
-    if "_" in texto:
+    if _NUMERO_RE.fullmatch(texto) is None:
         return False
-    try:
-        numero = float(texto)
-    except (TypeError, ValueError):
-        return False
-    return math.isfinite(numero)
+    return math.isfinite(float(texto))
 
 
 def is_ascii_digits(value: str) -> bool:
