@@ -53,9 +53,11 @@ def test_xdg_inutilizavel_cai_para_o_temporario(
 def test_sem_nenhum_lugar_gravavel_vira_ipc_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, temporario: Path
 ) -> None:
+    # gettempdir já tem o próprio fallback (cai para /tmp), então o temporário
+    # bloqueado é simulado na própria função, não pela variável de ambiente.
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(_bloqueado(tmp_path / "ruim")))
-    monkeypatch.setenv("TMPDIR", str(_bloqueado(tmp_path / "tmp-ruim")))
-    monkeypatch.setattr(tempfile, "tempdir", None)
+    bloqueado_tmp = str(_bloqueado(tmp_path / "tmp-ruim"))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: bloqueado_tmp)
     with pytest.raises(IpcError) as erro:
         IpcChannel._make_dir("")
     assert isinstance(erro.value, KbashError)
