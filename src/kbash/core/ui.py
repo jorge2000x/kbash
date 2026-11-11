@@ -241,19 +241,23 @@ class TerminalUi:
         for number, choice in enumerate(choices, start=1):
             print(f"   {number}) {choice}", file=self._err)
         if prompt.multi:
+            from .model import is_ascii_digits
+
             raw = self._read(f"{prompt.label} (números separados por vírgula): ").strip()
             if not raw:
                 return tuple(prompt.default or choices)
             picked: list[str] = []
             for token in raw.replace(",", " ").split():
-                index = int(token) - 1 if token.isdigit() else -1
+                index = int(token) - 1 if is_ascii_digits(token) else -1
                 if 0 <= index < len(choices) and choices[index] not in picked:
                     picked.append(choices[index])
             return tuple(picked)
+        from .model import is_ascii_digits
+
         raw = self._read(f"{prompt.label} [1]: ").strip()
         if not raw:
             return prompt.default or (choices[0] if choices else "")
-        if raw.isdigit() and 1 <= int(raw) <= len(choices):
+        if is_ascii_digits(raw) and 1 <= int(raw) <= len(choices):
             return choices[int(raw) - 1]
         return raw
 

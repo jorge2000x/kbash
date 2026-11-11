@@ -12,6 +12,7 @@ from .model import (
     Step,
     is_valid_date,
     is_valid_id,
+    is_ascii_digits,
     is_valid_number,
     is_valid_time,
 )
@@ -400,13 +401,13 @@ class _OpcoesMixin(_ParserBase):
 
     def _checar_tamanhos(self, block: _Block, minlen: str | None, maxlen: str | None) -> None:
         for name, bound in (("minlen", minlen), ("maxlen", maxlen)):
-            if bound is not None and (not bound.isdigit() or int(bound) < 0):
+            if bound is not None and (not is_ascii_digits(bound) or int(bound) < 0):
                 self._error(
                     f"{name}={bound!r} de #@option {block.id!r} precisa ser inteiro >= 0",
                     block.attr_line(name),
                 )
         if (minlen is not None and maxlen is not None
-                and minlen.isdigit() and maxlen.isdigit()
+                and is_ascii_digits(minlen) and is_ascii_digits(maxlen)
                 and int(minlen) > int(maxlen)):
             self._error(
                 f"minlen={minlen!r} maior que maxlen={maxlen!r} em #@option {block.id!r}",
@@ -416,12 +417,12 @@ class _OpcoesMixin(_ParserBase):
     def _checar_default_no_tamanho(
         self, block: _Block, default: str, minlen: str | None, maxlen: str | None
     ) -> None:
-        if minlen is not None and minlen.isdigit() and len(default) < int(minlen):
+        if minlen is not None and is_ascii_digits(minlen) and len(default) < int(minlen):
             self._error(
                 f"default de #@option {block.id!r} menor que minlen={minlen!r}",
                 block.attr_line("default"),
             )
-        if maxlen is not None and maxlen.isdigit() and len(default) > int(maxlen):
+        if maxlen is not None and is_ascii_digits(maxlen) and len(default) > int(maxlen):
             self._error(
                 f"default de #@option {block.id!r} maior que maxlen={maxlen!r}",
                 block.attr_line("default"),

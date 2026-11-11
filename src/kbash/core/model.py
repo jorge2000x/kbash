@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import math
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -70,12 +71,21 @@ def slugify(name: str) -> str:
 
 
 def is_valid_number(value: str) -> bool:
-    """§4.3: `number`/`slider` aceitam inteiro ou decimal."""
+    """§4.3: `number`/`slider` aceitam inteiro ou decimal finito (sem ``nan``, ``inf`` nem ``_``)."""
+    texto = value.strip()
+    if "_" in texto:
+        return False
     try:
-        float(value.strip())
+        numero = float(texto)
     except (TypeError, ValueError):
         return False
-    return True
+    return math.isfinite(numero)
+
+
+def is_ascii_digits(value: str) -> bool:
+    """Só dígitos ``0``-``9``. ``str.isdigit()`` também aceita ``²`` e ``٣``, que ``int()``
+    não converte da mesma forma (``²`` levanta ``ValueError``)."""
+    return re.fullmatch(r"[0-9]+", value) is not None
 
 
 def is_valid_date(value: str) -> bool:
