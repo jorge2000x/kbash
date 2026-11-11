@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 from collections import deque
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 from PySide6.QtCore import (
@@ -19,7 +20,7 @@ from PySide6.QtCore import (
     Qt,
 )
 
-from ..core.model import Script, Step, StepState
+from ..core.model import Option, Script, Step, StepState
 from ..core.planner import option_visible
 
 __all__ = ["LOG_BUFFER", "LogModel", "OptionModel", "SelectedStepsProxy", "StepListModel"]
@@ -298,51 +299,10 @@ class OptionModel(QAbstractListModel):
             option = self._script.options[index.row()]
         except IndexError:
             return None
-        match role:
-            case self.OptId:
-                return option.id
-            case self.Type:
-                return option.type
-            case self.Label:
-                return option.label
-            case self.Value:
-                return self._values.get(option.id, option.default or "")
-            case self.Choices:
-                return list(option.choices)
-            case self.Required:
-                return option.required
-            case self.Error:
-                return self._errors.get(option.id, "")
-            case self.Help:
-                return option.help
-            case self.Default:
-                return option.default or ""
-            case self.Minimum:
-                return option.minimum or ""
-            case self.Maximum:
-                return option.maximum or ""
-            case self.Step:
-                return option.step or ""
-            case self.Filters:
-                return list(option.filters)
-            case self.Pattern:
-                return option.pattern
-            case self.Minlen:
-                return option.minlen or ""
-            case self.Maxlen:
-                return option.maxlen or ""
-            case self.Multiple:
-                return option.multiple
-            case self.Visible:
-                row = index.row()
-                return self._visible[row] if row < len(self._visible) else False
-            case self.Owner:
-                return option.needs_step or ""
-            case self.Group:
-                return option.group or ""
-            case self.Url:
-                return option.url
-        return None
+        extrator = _EXTRATORES_DA_OPCAO.get(role)
+        if extrator is None:
+            return None
+        return extrator(self, option, index.row())
 
     def load(self, script: Script, values: dict[str, str]) -> None:
         self.beginResetModel()
@@ -411,6 +371,34 @@ class OptionModel(QAbstractListModel):
         for row in range(self.rowCount()):
             self.dataChanged.emit(self.index(row, 0), self.index(row, 0), [self.Error])
 
+
+#: Papel → como extrair o valor de uma opção (linha e índice da linha vêm junto).
+#: Substitui o `match` que ficava em `OptionModel.data`: cada papel tem uma linha, e um
+#: papel novo não aumenta a complexidade de `data()`.
+_Extrator = Callable[[OptionModel, Option, int], Any]
+_EXTRATORES_DA_OPCAO: dict[int, _Extrator] = {
+    OptionModel.OptId: lambda m, o, _i: o.id,
+    OptionModel.Type: lambda m, o, _i: o.type,
+    OptionModel.Label: lambda m, o, _i: o.label,
+    OptionModel.Value: lambda m, o, _i: m._values.get(o.id, o.default or ""),
+    OptionModel.Choices: lambda m, o, _i: list(o.choices),
+    OptionModel.Required: lambda m, o, _i: o.required,
+    OptionModel.Error: lambda m, o, _i: m._errors.get(o.id, ""),
+    OptionModel.Help: lambda m, o, _i: o.help,
+    OptionModel.Default: lambda m, o, _i: o.default or "",
+    OptionModel.Minimum: lambda m, o, _i: o.minimum or "",
+    OptionModel.Maximum: lambda m, o, _i: o.maximum or "",
+    OptionModel.Step: lambda m, o, _i: o.step or "",
+    OptionModel.Filters: lambda m, o, _i: list(o.filters),
+    OptionModel.Pattern: lambda m, o, _i: o.pattern,
+    OptionModel.Minlen: lambda m, o, _i: o.minlen or "",
+    OptionModel.Maxlen: lambda m, o, _i: o.maxlen or "",
+    OptionModel.Multiple: lambda m, o, _i: o.multiple,
+    OptionModel.Visible: lambda m, o, i: m._visible[i] if i < len(m._visible) else False,
+    OptionModel.Url: lambda m, o, _i: o.url,
+    OptionModel.Owner: lambda m, o, _i: o.needs_step or "",
+    OptionModel.Group: lambda m, o, _i: o.group or "",
+}
 
 class GroupProxy(QSortFilterProxyModel):
     """§4.8.1 — um bloco da tela de Seleção: só os itens do grupo ``group``.
