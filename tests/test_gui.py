@@ -1097,7 +1097,7 @@ def test_choice_empty_value_selects_nothing(app, tmp_path: Path) -> None:
 
 def test_password_typing_is_not_cleared(app, tmp_path: Path) -> None:
     """Digitar a senha não pode apagar o campo a cada tecla (§4.3)."""
-    from PySide6.QtQuick import QQuickItem
+    from PySide6.QtQml import QQmlExpression
 
     script = tmp_path / "pw.sh"
     script.write_text(
@@ -1112,33 +1112,41 @@ def test_password_typing_is_not_cleared(app, tmp_path: Path) -> None:
         bridge.goToPage(1)
         assert spin(app, lambda: bridge.page == 1)
 
+        # O campo é o `Kirigami.PasswordField` (o nativo), achado no QML: é um TextField,
+        # então tem echoMode e passwordCharacter. Não se percorre a árvore pelo Python:
+        # metaObject() nos itens do Kirigami derrubava o processo.
+        procurar_campo = QQmlExpression(
+            engine.rootContext(),
+            roots[0],
+            """(function () {
+              function dentro(it, d) {
+                if (!it || d > 10) return null;
+                if (it.echoMode !== undefined && it.passwordCharacter !== undefined) return it;
+                for (var i = 0; i < it.children.length; i++) {
+                  var r = dentro(it.children[i], d + 1);
+                  if (r) return r;
+                }
+                return null;
+              }
+              function ache(it, d) {
+                if (!it || d > 40) return null;
+                if (it.type === "password") {
+                  var campo = dentro(it, 0);
+                  if (campo) return campo;
+                }
+                for (var i = 0; i < it.children.length; i++) {
+                  var r = ache(it.children[i], d + 1);
+                  if (r) return r;
+                }
+                return null;
+              }
+              return ache(contentItem, 0);
+            })()""",
+        )
+
         def fields() -> list:
-            """O campo de senha é o `Kirigami.PasswordField` (o nativo)."""
-            found: list = []
-
-            def inner(item: object, depth: int = 0) -> None:
-                if depth > 10 or not isinstance(item, QQuickItem):
-                    return
-                if "PasswordField_QMLTYPE" in item.metaObject().className():
-                    found.append(item)
-                    return
-                for child in item.childItems():
-                    inner(child, depth + 1)
-
-            def walk(item: object, depth: int = 0) -> None:
-                if depth > 40 or not isinstance(item, QQuickItem):
-                    return
-                if "OptionField_QMLTYPE" in item.metaObject().className():
-                    try:
-                        if item.property("type") == "password":
-                            inner(item)
-                    except RuntimeError:  # item já destruído pelo Qt
-                        pass
-                for child in item.childItems():
-                    walk(child, depth + 1)
-
-            walk(roots[0].property("contentItem"))
-            return found
+            achado, _ok = procurar_campo.evaluate()
+            return [] if achado is None else [achado]
 
         assert spin(app, lambda: len(fields()) == 1)
         field = fields()[0]
@@ -1509,7 +1517,9 @@ def test_progresswin_dialog_follows_events(app, tmp_path: Path) -> None:
 
 def test_conditional_option_hides_and_shows(app, tmp_path: Path) -> None:
     """`show_if` esconde/mostra a opção no formulário (§4.3)."""
-    from PySide6.QtQuick import QQuickItem
+    import json
+
+    from PySide6.QtQml import QQmlExpression
 
     script = tmp_path / "cond.sh"
     script.write_text(
@@ -1527,23 +1537,16 @@ def test_conditional_option_hides_and_shows(app, tmp_path: Path) -> None:
         assert spin(app, lambda: bridge.page == 1)
 
         def visible(opt_id: str) -> object:
-            # childItems, não findChildren: delegates de Repeater
-            # têm pai visual correto mas fora da subárvore QObject,
-            # então findChildren nunca os acha
-            found = []
-
-            def walk(item: object, depth: int = 0) -> None:
-                if depth > 40 or not isinstance(item, QQuickItem):
-                    return
-                if item.metaObject().className().startswith("OptionField") and item.property(
-                    "optId"
-                ) == opt_id:
-                    found.append(item.property("visible"))
-                for child in item.childItems():
-                    walk(child, depth + 1)
-
-            walk(window.property("contentItem"))
-            return found[0] if found else None
+            # Procurado no QML pelos filhos visuais (`children`), não por findChildren:
+            # delegates de Repeater têm pai visual mas ficam fora da subárvore QObject.
+            # Não se usa metaObject() do Python: derrubava o processo com o Kirigami.
+            procura = QQmlExpression(
+                engine.rootContext(),
+                window,
+                _PROCURA_VISIBILIDADE.replace("__ID__", json.dumps(opt_id)),
+            )
+            valor, _ok = procura.evaluate()
+            return valor
 
         assert spin(app, lambda: visible("detalhe") is False)
         bridge.setOption("modo", "b")
@@ -1553,6 +1556,21 @@ def test_conditional_option_hides_and_shows(app, tmp_path: Path) -> None:
     finally:
         bridge.shutdown()
         application.processEvents()
+
+
+_PROCURA_VISIBILIDADE = """(function () {
+  function ache(it, d, id) {
+    if (!it || d > 40) return undefined;
+    if (it.optId === id) return it.visible;
+    for (var i = 0; i < it.children.length; i++) {
+      var r = ache(it.children[i], d + 1, id);
+      if (r !== undefined) return r;
+    }
+    return undefined;
+  }
+  var achado = ache(contentItem, 0, __ID__);
+  return achado === undefined ? null : achado;
+})()"""
 
 
 def test_portal_without_bus_fails_gracefully(app, tmp_path: Path, monkeypatch) -> None:
