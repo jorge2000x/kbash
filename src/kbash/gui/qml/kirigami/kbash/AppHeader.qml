@@ -47,6 +47,18 @@ ToolBar {
             Layout.fillWidth: true
         }
 
+        // botão voltar (fluxo linear): mesmo efeito do item Exibir > Voltar
+        AppButton {
+            text: ""
+            iconGlyph: "go-previous"
+            variant: "flat"
+            visible: bridge.page > 0
+            Layout.alignment: Qt.AlignVCenter
+            onClicked: bridge.goToPage(bridge.page - 1)
+            ToolTip.text: qsTr("Voltar (Esc)")
+            ToolTip.visible: hovered
+        }
+
         // gaveta de log (§10.2.5): abre/fecha sem painel fixo
         AppButton {
             text: ""

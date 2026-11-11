@@ -30,6 +30,64 @@ Kirigami.ApplicationWindow {
         iconFile: bridge.scriptIconFile
     }
 
+    // -- barra de menus (HIG do KDE: Arquivo, Editar, Configurações e Ajuda no
+    // mínimo; toda função com atalho aparece aqui). Os atalhos moram nos itens.
+    menuBar: MenuBar {
+        Menu {
+            title: qsTr("Arquivo")
+            MenuItem {
+                text: qsTr("Sair")
+                icon.name: "application-exit"
+                shortcut: StandardKey.Quit
+                onTriggered: window.close()
+            }
+        }
+        Menu {
+            title: qsTr("Editar")
+            MenuItem {
+                text: qsTr("Copiar log")
+                icon.name: "edit-copy"
+                enabled: bridge.page >= 2  // execução e resultado têm log
+                onTriggered: bridge.copyToClipboard(bridge.logText())
+            }
+        }
+        Menu {
+            title: qsTr("Exibir")
+            MenuItem {
+                text: qsTr("Log da execução")
+                icon.name: "utilities-log-viewer"
+                shortcut: "Ctrl+L"
+                checkable: true
+                checked: bridge.logDrawerOpen
+                onTriggered: bridge.logDrawerOpen = !bridge.logDrawerOpen
+            }
+            MenuItem {
+                text: qsTr("Voltar")
+                icon.name: "go-previous"
+                shortcut: "Escape"
+                enabled: bridge.page > 0
+                // o goToPage ignora saída da execução em andamento e índices fora de 0..3
+                onTriggered: bridge.goToPage(bridge.page - 1)
+            }
+        }
+        Menu {
+            title: qsTr("Configurações")
+            MenuItem {
+                text: qsTr("Configurar atalhos…")
+                icon.name: "configure-shortcuts"
+                enabled: false  // ainda não implementado; desabilitado, não escondido
+            }
+        }
+        Menu {
+            title: qsTr("Ajuda")
+            MenuItem {
+                text: qsTr("Sobre o kbash")
+                icon.name: "help-about"
+                enabled: false  // ainda não implementado; desabilitado, não escondido
+            }
+        }
+    }
+
     // A `ApplicationWindow` não põe Layout nenhum nos filhos diretos: sem
     // esta ColumnLayout ancorada, o StackLayout ficava com 0x0 e as telas
     // sumiam.
@@ -147,27 +205,6 @@ Kirigami.ApplicationWindow {
     // -- gaveta de log (§10.2.5): abre/fecha, sem painel fixo --------
     LogDrawer {
         id: logDrawer
-    }
-
-    // Ctrl+Q: atalho padrão de sair (HIG do KDE); fecha pela mesma via do X
-    Shortcut {
-        sequence: StandardKey.Quit
-        onActivated: window.close()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+L"
-        onActivated: bridge.logDrawerOpen = !bridge.logDrawerOpen
-    }
-
-    // Esc volta uma tela; o goToPage ignora saída da execução
-    // em andamento e índices fora de 0..3, então é seguro aqui
-    Shortcut {
-        sequence: "Escape"
-        onActivated: {
-            if (bridge.page > 0)
-                bridge.goToPage(bridge.page - 1)
-        }
     }
 
     onClosing: bridge.shutdown()
