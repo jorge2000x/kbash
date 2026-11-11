@@ -33,7 +33,7 @@ def test_action_parses_with_defaults() -> None:
     assert action is not None
     assert action.title == "Ver espaço"
     assert action.description == "Mede o cache."
-    assert action.button == "Executar"
+    assert action.button == "Rodar"
     assert action.root is False
     assert action.timeout == 60
     assert action.group is None
