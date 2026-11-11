@@ -170,7 +170,7 @@ AppPage {
     // -- pré-checagens (§7.5) ------------------------------------------
     AppCard {
         Layout.fillWidth: true
-        title: qsTr("Antes de executar")
+        title: qsTr("Antes de rodar")
 
         InlineMessage {
             Layout.fillWidth: true
@@ -212,7 +212,7 @@ AppPage {
         // "Voltar" não existe mais: o botão do cabeçalho nativo do Kirigami
         // faz isso, e dois "voltar" na tela é um a mais.
         AppButton {
-            text: qsTr("Executar")
+            text: qsTr("Rodar")
             variant: "primary"
             enabled: bridge.canRun
             onClicked: bridge.start()

@@ -8,7 +8,7 @@ import kbash
 
 AppPage {
     id: page
-    heading: qsTr("Executando")
+    heading: qsTr("Rodando")
     subheading: bridge.currentStepTitle !== "" ? bridge.currentStepTitle : qsTr("aguardando…")
 
     // -- progresso (§7.3) ----------------------------------------------
@@ -106,7 +106,7 @@ AppPage {
 
         AppPlaceholder {
             visible: bridge.stepCount === 0
-            text: qsTr("Nenhuma etapa para executar")
+            text: qsTr("Nenhuma etapa para rodar")
         }
     }
 

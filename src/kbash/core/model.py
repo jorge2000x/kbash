@@ -227,7 +227,7 @@ class Action:
     function: str
     title: str
     description: str = ""
-    button: str = "Executar"
+    button: str = "Rodar"
     group: str | None = None
     root: bool = False
     timeout: int = 60

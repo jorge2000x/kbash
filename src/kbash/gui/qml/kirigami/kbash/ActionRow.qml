@@ -23,7 +23,7 @@ ColumnLayout {
         case "ok": return qsTr("Concluído")
         case "failed": return qsTr("Falhou (código %1)").arg(action.exitCode)
         case "timeout": return qsTr("Tempo esgotado: a ação foi encerrada")
-        default: return qsTr("Não foi possível executar a ação")
+        default: return qsTr("Não foi possível rodar a ação")
         }
     }
 
@@ -55,7 +55,7 @@ ColumnLayout {
         }
 
         AppButton {
-            text: row.action.button || qsTr("Executar")
+            text: row.action.button || qsTr("Rodar")
             enabled: !row.action.running && !bridge.running
             onClicked: bridge.runAction(row.action.id)
         }
@@ -63,7 +63,7 @@ ColumnLayout {
 
     Label {
         visible: !!row.action.running
-        text: qsTr("Executando…")
+        text: qsTr("Rodando…")
         opacity: 0.7
         font.pixelSize: theme.smallFont
     }

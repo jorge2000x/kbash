@@ -76,7 +76,7 @@ class _PassosMixin(_ParserBase):
             function=function,
             title=_unquote((block.get("title") or block.id).strip()),
             description="\n".join(part for part in block.descs if part),
-            button=_unquote((block.get("button") or "Executar").strip()) or "Executar",
+            button=_unquote((block.get("button") or "Rodar").strip()) or "Rodar",
             group=group or None,
             root=_flag(block.get("root"), False),
             timeout=timeout,

@@ -67,7 +67,7 @@ AppPage {
         AppPlaceholder {
             Layout.fillWidth: true
             visible: bridge.stepCount === 0
-            text: qsTr("Nenhuma etapa foi executada")
+            text: qsTr("Nenhuma etapa rodou")
             explanation: qsTr("Nada foi selecionado ou a execução não começou.")
         }
     }

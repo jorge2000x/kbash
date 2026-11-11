@@ -808,7 +808,7 @@ class Bridge(QObject):
         if self._thread is not None and self._thread.is_alive():
             return False
         if not self._has_script():
-            self.notifyRaised.emit("abra um script antes de executar", "warn")
+            self.notifyRaised.emit("abra um script antes de rodar", "warn")
             return False
         try:
             plan = self._build_plan()
@@ -1211,7 +1211,7 @@ class Bridge(QObject):
         self._options_model.set_errors(errors)
         self._options_model.reload_errors()
         if errors:
-            raise ValueError("preencha as opções obrigatórias antes de executar")
+            raise ValueError("preencha as opções obrigatórias antes de rodar")
         return build_plan(self._script, self._steps_model.checked_ids(), self._options_model.values())
 
     def _log_count(self) -> int:

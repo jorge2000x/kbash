@@ -277,7 +277,7 @@ class Executor:
         # §9.2 — o diálogo do sistema aparece aqui: depois da revisão do plano
         # (quem chama já mostrou a lista) e antes de qualquer step rodar.
         if PRIVILEGE_ELEVATION and any(step.root for step in self.steps) and not self.authorize():
-            raise PrecheckError("autorização de root negada ou cancelada; nenhum step foi executado")
+            raise PrecheckError("autorização de root negada ou cancelada; nenhum step rodou")
         result = RunResult()
         started = time.monotonic()
         self._tempdir = TemporaryDirectory(prefix="kbash-")

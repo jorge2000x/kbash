@@ -171,7 +171,7 @@ AppPage {
         // §9.1 — modo dev: caminho e SHA-256 antes de executar
         AppCard {
             title: qsTr("Integridade do script")
-            subtitle: qsTr("Nenhum código é executado antes de você conferir isto aqui.")
+            subtitle: qsTr("Nenhum código roda antes da sua conferência.")
 
             Label {
                 Layout.fillWidth: true
@@ -208,7 +208,7 @@ AppPage {
             Label {
                 Layout.fillWidth: true
                 text: {
-                    if (bridge.stepCount === 0) return qsTr("Nada será executado.")
+                    if (bridge.stepCount === 0) return qsTr("Nada vai rodar.")
                     if (bridge.optionCount === 0) return qsTr("%1 etapa(s), sem opções.").arg(bridge.stepCount)
                     return qsTr("%1 etapa(s), %2 opção(ões).").arg(bridge.stepCount).arg(bridge.optionCount)
                 }
