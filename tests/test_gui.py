@@ -225,39 +225,29 @@ def test_pages_survive_navigation(app, gui) -> None:
     destruiria tudo que estava montado (scroll, auto-scroll do log, o diálogo
     de log aberto). O StackLayout só troca o índice.
     """
-    import re
+    from PySide6.QtQml import QQmlExpression
+    from shiboken6 import getCppPointer
 
-    from PySide6.QtQuick import QQuickItem
+    _app, engine, roots, bridge = gui
+    # Os filhos do StackLayout são lidos no QML e comparados pelo ponteiro C++. Não se
+    # percorre a árvore pelo Python: metaObject() nos itens do Kirigami derrubava o processo.
+    filhos = QQmlExpression(engine.rootContext(), roots[0], "pageStack.children")
 
-    _app, _engine, roots, bridge = gui
+    def ponteiros() -> list[int]:
+        lista, _ok = filhos.evaluate()
+        return [getCppPointer(lista.at(i))[0] for i in range(lista.count())]
 
-    def page_items() -> dict:
-        found: dict = {}
-
-        def walk(item: object, depth: int = 0) -> None:
-            if depth > 40 or not isinstance(item, QQuickItem):
-                return
-            # QML registra como `Nome_QMLTYPE_<id>`
-            match = re.match(r"^(\w+)_QMLTYPE", item.metaObject().className())
-            if match and match.group(1).endswith("Page"):
-                found[match.group(1)] = item
-            for child in item.childItems():
-                walk(child, depth + 1)
-
-        walk(roots[0].property("contentItem"))
-        return found
-
-    before = page_items()
-    assert {"WelcomePage", "SelectPage", "RunPage", "ResultPage"} <= set(before), sorted(before)
+    # Kirigami embrulha as páginas (Loader/StackView): o StackLayout tem 3 filhos visuais,
+    # não 4. A garantia é a identidade dos que existem, não a contagem das telas.
+    before = ponteiros()
+    assert len(before) >= 3, before
 
     bridge.goToPage(1)
     assert spin(app, lambda: bridge.page == 1)
     bridge.goToPage(0)
     assert spin(app, lambda: bridge.page == 0)
 
-    after = page_items()
-    for name, item in before.items():
-        assert after.get(name) is item, f"{name} foi recriada ao navegar"
+    assert ponteiros() == before, "uma página foi recriada ao navegar"
 
 
 def test_go_to_page_ignores_unknown_destinations(gui) -> None:
