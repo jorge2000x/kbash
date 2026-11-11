@@ -7,8 +7,9 @@ name: Verificação
 #                           pytest-qt. Sem Kirigami no runner, os testes de GUI ficam
 #                           pulados com o motivo no log.
 #   gui      (opcional)     suíte completa de GUI (test_gui, test_ui, qtbot) contra o
-#                           Kirigami do Ubuntu 26.04, via tools/gui-completo.sh. Não
-#                           bloqueia: 11 testes de test_gui.py ainda falham (ver PR).
+#                           Kirigami do Ubuntu 26.04, via tools/gui-completo.sh (sob
+#                           dbus-run-session). Não bloqueia por enquanto: passa em
+#                           test_gui (66), test_ui (38) e qtbot (3), um processo por arquivo.
 #   mutmut   (opcional)     mutação dos módulos críticos (§16.4). Só roda manualmente com
 #                           a entrada "mutmut" marcada. Não bloqueia.
 
