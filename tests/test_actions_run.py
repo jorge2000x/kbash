@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from kbash.core.actions import ActionResult, _cwd, _signal_group, action_env, run_action
+from kbash.core.actions import ActionResult, _cwd, action_env, run_action
+from kbash.core.proc import signal_group as _signal_group
 from kbash.core.executor import helpers_path
 from kbash.core.parser import parse_script
 
@@ -193,6 +194,9 @@ def test_signal_group_suprime_erros_do_sistema(monkeypatch, erro: type[OSError])
 
     class Processo:
         pid = 123
+
+        def send_signal(self, _sig: int) -> None:  # como o Popen: processo já morto
+            raise ProcessLookupError("já terminou")
 
     monkeypatch.setattr(os, "killpg", falha)
     _signal_group(Processo(), 15)  # não pode levantar
