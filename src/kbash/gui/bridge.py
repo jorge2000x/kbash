@@ -138,6 +138,8 @@ class Bridge(QObject):
         self._library: list[dict[str, Any]] = []
         self.refreshLibrary()
         self._presets: dict[str, dict[str, str]] = {}
+        # última predefinição excluída, para o desfazer (uma só)
+        self._undo_preset: tuple[str, dict[str, str]] | None = None
         self._running = False
         self._executor: Executor | None = None
         self._thread: threading.Thread | None = None
@@ -252,6 +254,7 @@ class Bridge(QObject):
 
     # predefinições do script aberto (gui/presets.py): nomes em ordem alfabética
     presetsChanged = Signal()
+    presetDeleted = Signal(str)
     presetNames = Property("QStringList", lambda self: sorted(self._presets), notify=presetsChanged)
 
     # biblioteca da tela inicial (gui/library.py): dicts com path, name, description, valid
@@ -547,13 +550,31 @@ class Bridge(QObject):
             presets = read_presets(self._script.id)
             if name not in presets:
                 return False
-            del presets[name]
+            removed = presets.pop(name)
             write_presets(self._script.id, presets)
         except (PresetError, OSError) as exc:
             self.notifyRaised.emit(f"não consegui excluir a predefinição: {exc}", "error")
             return False
+        self._undo_preset = (name, removed)
         self._reload_presets()
-        self.notifyRaised.emit(f"predefinição excluída: {name}", "info")
+        self.presetDeleted.emit(name)
+        return True
+
+    @Slot(result=bool)
+    def undoDeletePreset(self) -> bool:
+        """Restaura a última predefinição excluída. Só vale uma vez."""
+        if self._undo_preset is None or not self._script.id:
+            return False
+        name, values = self._undo_preset
+        try:
+            presets = read_presets(self._script.id)
+            presets[name] = values
+            write_presets(self._script.id, presets)
+        except (PresetError, OSError) as exc:
+            self.notifyRaised.emit(f"não consegui desfazer a exclusão: {exc}", "error")
+            return False
+        self._undo_preset = None
+        self._reload_presets()
         return True
 
     @Slot()
