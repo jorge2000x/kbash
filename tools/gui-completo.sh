@@ -33,9 +33,15 @@ export PYTHONPATH="$RAIZ/src:$APPDIR${PYTHONPATH:+:$PYTHONPATH}"
 echo "== 3/3 pytest da GUI (um processo por arquivo: um abort do Qt não esconde os outros)"
 cd "$RAIZ"
 falhou=0
+# Os testes de portal (D-Bus) precisam de um barramento de sessão próprio. Sem
+# dbus-run-session eles são pulados com o motivo, em vez de travarem esperando o bus.
+envolve=()
+if command -v dbus-run-session >/dev/null 2>&1; then
+    envolve=(dbus-run-session --)
+fi
 for arquivo in tests/test_gui.py tests/test_ui.py tests/test_gui_qtbot.py; do
     set +e
-    "$PY" -m pytest "$arquivo" -q -rs -p no:cacheprovider --timeout=180
+    "${envolve[@]}" "$PY" -m pytest "$arquivo" -q -rs -p no:cacheprovider --timeout=180
     codigo=$?
     set -e
     if [ "$codigo" -ne 0 ]; then
