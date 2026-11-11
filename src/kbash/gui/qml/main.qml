@@ -30,61 +30,75 @@ Kirigami.ApplicationWindow {
         iconFile: bridge.scriptIconFile
     }
 
-    // -- barra de menus (HIG do KDE: Arquivo, Editar, Configurações e Ajuda no
-    // mínimo; toda função com atalho aparece aqui). Os atalhos moram nos itens.
+    // -- ações da barra de menus (HIG do KDE: Arquivo, Editar, Configurações e Ajuda no
+    // mínimo; toda função com atalho aparece aqui). O atalho fica na Action, porque o
+    // MenuItem do QtQuick.Controls 6 não tem a propriedade `shortcut`.
+    Action {
+        id: quitAction
+        text: qsTr("Sair")
+        icon.name: "application-exit"
+        shortcut: StandardKey.Quit
+        onTriggered: window.close()
+    }
+    Action {
+        id: copyLogAction
+        text: qsTr("Copiar log")
+        icon.name: "edit-copy"
+        enabled: bridge.page >= 2  // execução e resultado têm log
+        onTriggered: bridge.copyToClipboard(bridge.logText())
+    }
+    Action {
+        id: logAction
+        text: qsTr("Log da execução")
+        icon.name: "utilities-log-viewer"
+        shortcut: "Ctrl+L"
+        checkable: true
+        checked: bridge.logDrawerOpen
+        onTriggered: bridge.logDrawerOpen = !bridge.logDrawerOpen
+    }
+    Action {
+        id: backAction
+        text: qsTr("Voltar")
+        icon.name: "go-previous"
+        shortcut: "Escape"
+        enabled: bridge.page > 0
+        // o goToPage ignora saída da execução em andamento e índices fora de 0..3
+        onTriggered: bridge.goToPage(bridge.page - 1)
+    }
+    Action {
+        id: configureShortcutsAction
+        text: qsTr("Configurar atalhos…")
+        icon.name: "configure-shortcuts"
+        enabled: false  // ainda não implementado; desabilitado, não escondido
+    }
+    Action {
+        id: aboutAction
+        text: qsTr("Sobre o kbash")
+        icon.name: "help-about"
+        enabled: false  // ainda não implementado; desabilitado, não escondido
+    }
+
     menuBar: MenuBar {
         Menu {
             title: qsTr("Arquivo")
-            MenuItem {
-                text: qsTr("Sair")
-                icon.name: "application-exit"
-                shortcut: StandardKey.Quit
-                onTriggered: window.close()
-            }
+            MenuItem { action: quitAction }
         }
         Menu {
             title: qsTr("Editar")
-            MenuItem {
-                text: qsTr("Copiar log")
-                icon.name: "edit-copy"
-                enabled: bridge.page >= 2  // execução e resultado têm log
-                onTriggered: bridge.copyToClipboard(bridge.logText())
-            }
+            MenuItem { action: copyLogAction }
         }
         Menu {
             title: qsTr("Exibir")
-            MenuItem {
-                text: qsTr("Log da execução")
-                icon.name: "utilities-log-viewer"
-                shortcut: "Ctrl+L"
-                checkable: true
-                checked: bridge.logDrawerOpen
-                onTriggered: bridge.logDrawerOpen = !bridge.logDrawerOpen
-            }
-            MenuItem {
-                text: qsTr("Voltar")
-                icon.name: "go-previous"
-                shortcut: "Escape"
-                enabled: bridge.page > 0
-                // o goToPage ignora saída da execução em andamento e índices fora de 0..3
-                onTriggered: bridge.goToPage(bridge.page - 1)
-            }
+            MenuItem { action: logAction }
+            MenuItem { action: backAction }
         }
         Menu {
             title: qsTr("Configurações")
-            MenuItem {
-                text: qsTr("Configurar atalhos…")
-                icon.name: "configure-shortcuts"
-                enabled: false  // ainda não implementado; desabilitado, não escondido
-            }
+            MenuItem { action: configureShortcutsAction }
         }
         Menu {
             title: qsTr("Ajuda")
-            MenuItem {
-                text: qsTr("Sobre o kbash")
-                icon.name: "help-about"
-                enabled: false  // ainda não implementado; desabilitado, não escondido
-            }
+            MenuItem { action: aboutAction }
         }
     }
 
