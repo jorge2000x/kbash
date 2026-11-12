@@ -181,7 +181,7 @@ def test_prelude_para_no_END_e_nao_le_o_resto(tmp_path: Path) -> None:
         ["bash", "-c", ROOT_PRELUDE + 'printf "v=%s d=%s" "$OPT_SENHA" "${DEPOIS-}"'],
         env=publico,
         cwd=str(tmp_path),
-        entrada=entrada + b"DEPOIS QQ==\n",
+        entrada=entrada + b"\nDEPOIS QQ==\n",
     )
     saida, _ = process.communicate(timeout=10)
     assert saida == "v=s3nh4 com espaço d=".encode()
