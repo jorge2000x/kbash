@@ -191,9 +191,10 @@ rt_progress() {
     local value=${1-} text=${2-} json_value
     if [ "$value" = "-" ] || [ -z "$value" ]; then
         json_value="null"
-    elif [[ $value =~ ^[0-9]+$ ]]; then
-        # §8.2 — value é fração 0.0–1.0
-        json_value=$(printf '%d.%d' $(( value / 100 )) $(( (value % 100) * 10 )))
+    elif [[ $value =~ ^[0-9]+$ ]] && [ $((10#$value)) -le 100 ]; then
+        # §8.2 — value é fração 0.0–1.0: 37 vira 0.37 (duas casas, base 10)
+        value=$((10#$value))
+        json_value=$(printf '%d.%02d' $(( value / 100 )) $(( value % 100 )))
     else
         rt_warn "rt_progress: valor inválido: $value"
         return 0
@@ -248,7 +249,7 @@ _rt_ask() {
     [ "$kind" = secret ] && secret=true
     kind=input
     if [ "$_RT_FD" != 1 ]; then
-        if [ "$kind" = secret ]; then
+        if [ "$secret" = true ]; then
             rt__ask_terminal "${label}: " "$fallback" secret
             return 0
         fi
@@ -273,6 +274,26 @@ rt_choice() { _rt_pick choice false "$@"; }
 # t="multi" faz o runtime ignorar a mensagem e responder cancel)
 rt_multi() { _rt_pick choice true "$@"; }
 
+# _rt_pick_um "resposta" item... → imprime o item (por nome ou número, 1-N) e 0;
+# 1 se não casa com nada. O número vale como no menu original.
+_rt_pick_um() {
+    local answer=$1 item n=0
+    shift
+    for item in "$@"; do
+        n=$((n + 1))
+        if [ "$item" = "$answer" ]; then
+            printf '%s' "$item"
+            return 0
+        fi
+    done
+    if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$((10#$answer))" -ge 1 ] && [ "$((10#$answer))" -le "$#" ]; then
+        local -a all=("$@")
+        printf '%s' "${all[$((10#$answer - 1))]}"
+        return 0
+    fi
+    return 1
+}
+
 _rt_pick() {
     rt__no_interaction "helper de escolha" || return 1
     local kind=$1 multi=$2 label=${3-}
@@ -285,15 +306,22 @@ _rt_pick() {
             printf '  %d) %s\n' "$n" "$item" >&2
         done
         answer=$(rt__ask_terminal "${label}: " "")
-        if [ -n "$answer" ]; then
-            for item in "${choices[@]}"; do
-                [ "$item" = "$answer" ] && printf '%s' "$answer" && return 0
+        if [ "$multi" = true ]; then
+            # §8.2 — várias escolhas, uma por linha: aceita "1 3", "a,c" ou nomes
+            local -a tokens=()
+            local token
+            read -r -a tokens <<< "${answer//,/ }"
+            for token in "${tokens[@]}"; do
+                if item=$(_rt_pick_um "$token" "${choices[@]}"); then
+                    printf '%s\n' "$item"
+                else
+                    rt_warn "escolha desconhecida: $token"
+                fi
             done
-            # aceita número também, como o menu original (1-4)
-            if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "${#choices[@]}" ]; then
-                printf '%s' "${choices[$((answer - 1))]}"
-                return 0
-            fi
+            return 0
+        fi
+        if [ -n "$answer" ]; then
+            _rt_pick_um "$answer" "${choices[@]}" && return 0
         fi
         [ ${#choices[@]} -gt 0 ] && printf '%s' "${choices[0]}"
         return 0
