@@ -37,6 +37,7 @@ from .ipc import valid_var_key
 from .proc import GRACE_PERIOD
 from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
+from .redacao import redige
 from .linhas import MAX_LOG_LINE, linhas_limitadas
 
 __all__ = [
@@ -70,11 +71,20 @@ ROOT_PASSTHROUGH = (
     "XAUTHORITY", "XDG_RUNTIME_DIR", "XDG_DATA_DIRS",
 )
 
-#: Elevação de privilégio (SPEC.md §9.2) **desligada por enquanto**: os steps
-#: ``#@root true`` rodam como qualquer outro, e o usuário nunca vê um pedido de
-#: senha. Com a elevação ligada, o pkexec mostra o diálogo do sistema (polkit) uma
-#: vez, logo antes do primeiro step, depois que o usuário revisou o plano.
+#: Elevação de privilégio (SPEC.md §9.2) **ligada**: os steps ``#@root true`` passam
+#: pelo pkexec, e o polkit mostra o diálogo do sistema uma vez, logo antes do primeiro
+#: step, depois que o usuário revisou o plano. Riscos abertos: senhas aparecem no argv
+#: do pkexec e o script inteiro roda como root (ver a análise de segurança).
 PRIVILEGE_ELEVATION = True
+
+
+def ambiente_padrao(env: dict[str, str]) -> None:
+    """Padrões para saída limpa de ferramentas: sem códigos de cor nem perguntas do apt.
+
+    Só preenche o que está ausente; um valor definido pelo usuário é mantido.
+    """
+    env.setdefault("TERM", "dumb")
+    env.setdefault("DEBIAN_FRONTEND", "noninteractive")
 
 
 class IpcChannel(Protocol):
@@ -206,7 +216,9 @@ def precheck(
 
 
 def _texto_da_linha(raw: bytes, truncada: bool) -> str:
-    text = raw.decode("utf-8", errors="replace").rstrip("\n")
+    text = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+    # \r volta ao início da linha: fica o estado final (barras de progresso de apt/curl)
+    text = text.rsplit("\r", 1)[-1]
     return text + " [linha truncada]" if truncada else text
 
 
@@ -423,6 +435,7 @@ class Executor:
                 "RT_WORKDIR": str(self._tempdir.name) if self._tempdir else str(Path.cwd()),
             }
         )
+        ambiente_padrao(env)
         for option_id, value in self.plan.options.items():
             env[f"OPT_{option_id.upper()}"] = value
         for key, value in self.variables.items():
@@ -452,7 +465,7 @@ class Executor:
     def _build_argv(self, step: Step, env: dict[str, str]) -> tuple[list[str], str]:
         home = self._step_cwd(env)
         argv = ["bash", "--noprofile", "--norc", "-c", STEP_COMMAND]
-        if step.root and PRIVILEGE_ELEVATION:  # §9.2 — desligado por enquanto
+        if step.root and PRIVILEGE_ELEVATION:  # §9.2 — elevação ligada
             argv = self.root_command(argv, env, home)
         return argv, home  # §7.1 — cwd = $HOME
 
@@ -465,7 +478,16 @@ class Executor:
                 text = _texto_da_linha(raw, truncada)
                 self._log(step_id, name, text, "error" if name == "stderr" else "info")
 
+    def _segredos(self) -> list[str]:
+        """Valores atuais das opções ``password``: o que a linha de log não pode mostrar."""
+        return [
+            self.plan.options.get(option.id, "")
+            for option in self.script.options
+            if option.type == "password"
+        ]
+
     def _log(self, step_id: str | None, stream: str, text: str, level: str = "info") -> None:
+        text = redige(text, self._segredos())
         event = LogLine(step_id, stream, text, level)  # type: ignore[arg-type]
         if self.log_sink is not None:
             self.log_sink(event)

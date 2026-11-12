@@ -22,10 +22,12 @@ from .executor import (
     GRACE_PERIOD,
     PRIVILEGE_ELEVATION,
     STEP_COMMAND,
+    ambiente_padrao,
     default_root_command,
 )
 from . import proc
 from .model import Action, Script
+from .redacao import redige
 from .planner import default_options, expand_value, option_visible
 
 __all__ = ["OUTPUT_LINES", "ActionResult", "action_env", "run_action"]
@@ -113,6 +115,10 @@ def _tail(text: str) -> str:
     return "\n".join(deque(text.splitlines(), maxlen=OUTPUT_LINES))
 
 
+def _segredos_da_acao(script: Script, env: dict[str, str]) -> list[str]:
+    return [env.get(f"OPT_{option.id.upper()}", "") for option in script.options if option.type == "password"]
+
+
 def _notifica(
     on_start: Callable[[subprocess.Popen[bytes]], None] | None,
     process: subprocess.Popen[bytes],
@@ -170,6 +176,7 @@ def run_action(
             "RT_STEP_FN": action.function,
         }
     )
+    ambiente_padrao(env)
     cwd = _cwd(env, workdir)
     argv: list[str] = ["bash", "--noprofile", "--norc", "-c", STEP_COMMAND]
     if action.root and PRIVILEGE_ELEVATION:
@@ -199,6 +206,6 @@ def run_action(
         action_id=action.id,
         status=status,
         exit_code=code,
-        output=_tail(raw.decode("utf-8", errors="replace")),
+        output=_tail(redige(raw.decode("utf-8", errors="replace"), _segredos_da_acao(script, env))),
         duration=time.monotonic() - started,
     )
