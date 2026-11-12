@@ -61,6 +61,9 @@ source_paths = [
     "src/kbash/core/planner.py",
     "src/kbash/core/ipc.py",
     "src/kbash/core/actions.py",
+    "src/kbash/core/linhas.py",
+    "src/kbash/core/redacao.py",
+    "src/kbash/core/validacao.py",
 ]
 # só os testes do core: GUI (Qt) fica fora da mutação (SPEC §16.1)
 pytest_add_cli_args_test_selection = [
@@ -76,4 +79,7 @@ pytest_add_cli_args_test_selection = [
     "tests/test_props_actions.py",
     "tests/test_actions_and_groups.py",
     "tests/test_display_options.py",
+    "tests/test_linhas.py",
+    "tests/test_redacao_saida.py",
+    "tests/test_erro_de_entrada.py",
 ]
