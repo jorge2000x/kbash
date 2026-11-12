@@ -169,3 +169,33 @@ def test_acao_root_nao_leva_senha_no_argv(tmp_path: Path) -> None:
     assert result.status == "ok"
     assert chamadas and SEGREDO not in " ".join(chamadas[0])
     assert saida.read_text(encoding="utf-8") == SEGREDO
+
+
+# -- 4. protocolo do stdin e montagem do comando root (mutantes sobreviventes) ---
+def test_prelude_para_no_END_e_nao_le_o_resto(tmp_path: Path) -> None:
+    from kbash.core.segredos_root import ROOT_PRELUDE, separa_segredos_root
+
+    publico, entrada = separa_segredos_root({"OPT_SENHA": "s3nh4 com espaço"}, {"OPT_SENHA"})
+    # o dado extra depois do END não pode ser lido pelo prelúdio nem exportado como variável
+    process = proc.start(
+        ["bash", "-c", ROOT_PRELUDE + 'printf "v=%s d=%s" "$OPT_SENHA" "${DEPOIS-}"'],
+        env=publico,
+        cwd=str(tmp_path),
+        entrada=entrada + b"DEPOIS QQ==\n",
+    )
+    saida, _ = process.communicate(timeout=10)
+    assert saida == "v=s3nh4 com espaço d=".encode()
+
+
+def test_prepara_root_passa_o_cwd_ao_comando_root(tmp_path: Path) -> None:
+    from kbash.core.segredos_root import prepara_root
+
+    script = parse_script(_script_root(tmp_path, tmp_path / "x.txt"))
+    recebido: list[str] = []
+
+    def comando_root(argv: list[str], env: dict[str, str], cwd: str) -> list[str]:
+        recebido.append(cwd)
+        return list(argv)
+
+    prepara_root("true", script, {"OPT_SENHA": SEGREDO}, str(tmp_path), comando_root)
+    assert recebido == [str(tmp_path)]
