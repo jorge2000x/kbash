@@ -32,7 +32,7 @@ def test_linha_longa_quebrada_em_pedacos_nao_cresce_na_memoria() -> None:
     for _ in range(1000):
         assert leitor.alimenta(b"x" * 100) == []
     assert len(leitor._resto) <= 5  # noqa: SLF001 — o invariante de memória é o ponto do teste
-    assert leitor.alimenta(b"fim\ndepois\n") == [b"depois"]
+    assert leitor.alimenta(b"fim\nok\n") == [b"ok"]  # "fim" é o final da linha longa
     assert leitor.descartadas == 1
 
 
