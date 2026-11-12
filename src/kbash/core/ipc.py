@@ -119,6 +119,9 @@ _SEPARADOR_DE_CAMPO = re.compile(r"[\t\n]")
 )
 def encode_response(request_id: str, status: str, value: str) -> bytes:
     """§8.3 — ``<id>\\t<status>\\t<valor>`` + quebra de linha."""
+    # no corpo, não só no contrato: sem icontract (AppImage) um separador no id quebraria o protocolo
+    if _SEPARADOR_DE_CAMPO.search(request_id + status):
+        raise IpcError("id e status não podem conter TAB nem quebra de linha (§8.3)")
     head = f"{request_id}\t{status}\t"
     escaped = escape_value(value)
     budget = MAX_RESPONSE_LINE - len(head)
