@@ -67,7 +67,7 @@ def test_canal_registra_resposta_de_rt_secret(tmp_path: Path) -> None:
         assert prompts and prompts[0].secret is True
         channel.respond(prompts[0].request_id, SEGREDO)
         worker.join(timeout=10)
-        assert channel.segredos() == [SEGREDO]
+        assert channel.segredos == [SEGREDO]
     finally:
         channel.close()
 
@@ -86,8 +86,7 @@ def test_executor_esconde_resposta_de_rt_secret_no_log(tmp_path: Path) -> None:
         variables: ClassVar[dict[str, str]] = {}
         step_id = ""
 
-        def segredos(self) -> list[str]:
-            return [SEGREDO]
+        segredos: ClassVar[list[str]] = [SEGREDO]
 
     executor._ipc = Canal()  # type: ignore[assignment] - canal mínimo, só o que o log consulta
     textos: list[str] = []
