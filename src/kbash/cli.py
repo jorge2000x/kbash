@@ -13,6 +13,7 @@ import signal
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, TextIO
 
 from .core.errors import KbashError, ParseError, PrecheckError, ValidationError
@@ -242,17 +243,11 @@ def cmd_run_headless(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     )
     printer.executor = executor
 
-    def on_signal(number: int, frame: Any) -> None:
-        executor.cancel()
-
-    previous = signal.getsignal(signal.SIGINT)
-    for number in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(number, on_signal)
+    restaura = _cancela_ao_sinal(executor.cancel)
     try:
         result = executor.run(printer.handle)
     finally:
-        signal.signal(signal.SIGINT, previous)
-        signal.signal(signal.SIGTERM, previous)
+        restaura()
         ui.close()
     return result.exit_code()
 
@@ -260,6 +255,27 @@ def cmd_run_headless(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
 # ---------------------------------------------------------------------------
 # run (GUI) e modo bundle — implementados nas Fases 3 e 5
 # ---------------------------------------------------------------------------
+def _cancela_ao_sinal(cancelar: Callable[[], None]) -> Callable[[], None]:
+    """Cancela a execução em SIGINT e SIGTERM; devolve a função que restaura cada handler anterior.
+
+    Cada sinal volta ao próprio handler: restaurar o de SIGINT no SIGTERM trocaria
+    o tratamento de um pelo do outro.
+    """
+    anteriores = {n: signal.getsignal(n) for n in (signal.SIGINT, signal.SIGTERM)}
+
+    def on_signal(number: int, frame: Any) -> None:
+        cancelar()
+
+    for n in anteriores:
+        signal.signal(n, on_signal)
+
+    def restaura() -> None:
+        for n, handler in anteriores.items():
+            signal.signal(n, handler)
+
+    return restaura
+
+
 def cmd_run_gui(args: argparse.Namespace) -> int:
     try:
         from .gui.app import launch
