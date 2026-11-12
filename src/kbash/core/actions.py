@@ -27,7 +27,7 @@ from .executor import (
 )
 from . import proc
 from .model import Action, Script
-from .redacao import redige
+from .redacao import redige, segredos_do_script
 from .planner import default_options, expand_value, option_visible
 
 __all__ = ["OUTPUT_LINES", "ActionResult", "action_env", "run_action"]
@@ -113,10 +113,6 @@ def _cwd(env: dict[str, str], workdir: str) -> str:
 
 def _tail(text: str) -> str:
     return "\n".join(deque(text.splitlines(), maxlen=OUTPUT_LINES))
-
-
-def _segredos_da_acao(script: Script, env: dict[str, str]) -> list[str]:
-    return [env.get(f"OPT_{option.id.upper()}", "") for option in script.options if option.type == "password"]
 
 
 def _notifica(
@@ -206,6 +202,6 @@ def run_action(
         action_id=action.id,
         status=status,
         exit_code=code,
-        output=_tail(redige(raw.decode("utf-8", errors="replace"), _segredos_da_acao(script, env))),
+        output=_tail(redige(raw.decode("utf-8", errors="replace"), segredos_do_script(script, env))),
         duration=time.monotonic() - started,
     )
