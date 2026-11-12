@@ -1860,11 +1860,11 @@ def test_option_paragraph_shows_text_and_no_opt_row(app, tmp_path: Path) -> None
     assert field.property("isDisplay") is True
 
 
-def test_option_link_renders_button_with_label(app, tmp_path: Path) -> None:
+def test_option_link_renders_visible_link_text(app, tmp_path: Path) -> None:
+    """type=link é texto com aparência de link (HIG), não um botão."""
     field = _option_field(
         app, tmp_path, optId="ajuda", type="link", label="Abrir docs", url="https://example.org",
     )
-    # o Button repete o texto no próprio item, no ícone e no rótulo interno
     assert spin(app, lambda: len(_visible_with_text(field, "Abrir docs")) >= 1)
     assert field.property("url") == "https://example.org"
 
