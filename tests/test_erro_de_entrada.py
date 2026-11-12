@@ -12,7 +12,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from kbash.core.model import erro_de_entrada
+from kbash.core.validacao import erro_de_entrada
 
 
 def test_vazio_e_valido_para_qualquer_tipo() -> None:
