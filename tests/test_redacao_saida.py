@@ -30,6 +30,14 @@ def test_redige_ignora_segredo_vazio() -> None:
     assert redige("texto", [""]) == "texto"
 
 
+    # "abcd" é mascarado antes de "b"; a ordem lexicográfica reversa colocaria "b" antes
+    assert redige("abcd", ["abcd", "b"]) == MASCARA
+
+
+def test_redige_ordem_nao_depende_da_ordem_da_lista() -> None:
+    assert redige("abcd", ["b", "abcd"]) == MASCARA
+
+
 def test_redige_mascara_o_mais_longo_primeiro() -> None:
     # "ab" dentro de "abc": o mais longo sai inteiro, sem sobrar "c" de um segredo maior
     assert redige("abc", ["ab", "abc"]) == MASCARA

@@ -60,8 +60,14 @@ def test_hora_fora_do_dia_e_recusada() -> None:
 
 
 def test_tipo_desconhecido_levanta_erro_claro() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"^tipo de prompt sem validação: 'cor'$"):
         erro_de_entrada("cor", "azul", "", "")
+
+
+def test_limite_nao_numerico_e_ignorado() -> None:
+    assert erro_de_entrada("number", "5", "abc", "") == ""
+    assert erro_de_entrada("number", "5", "", "xyz") == ""
+    assert erro_de_entrada("number", "0", "abc", "") == ""
 
 
 @settings(max_examples=200, deadline=None)

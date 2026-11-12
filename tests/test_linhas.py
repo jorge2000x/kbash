@@ -9,10 +9,24 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
+import pytest
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from kbash.core.linhas import LeitorDeLinhas, linhas_limitadas
+
+
+@pytest.mark.parametrize("limite", [0, -1])
+def test_limite_nao_positivo_e_recusado(limite: int) -> None:
+    with pytest.raises(ValueError, match=r"^limite deve ser positivo$"):
+        LeitorDeLinhas(limite=limite)
+
+
+def test_limite_um_e_valido() -> None:
+    leitor = LeitorDeLinhas(limite=1)
+    assert leitor.alimenta(b"a\nbc\n") == [b"a"]
+    assert leitor.descartadas == 1
 
 
 def test_linha_dentro_do_limite_passa() -> None:
