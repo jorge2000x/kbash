@@ -490,7 +490,7 @@
     "src/kbash/gui/bridge.py": 0.0,
     "src/kbash/gui/library.py": 72.03,
     "src/kbash/gui/models.py": 16.76,
-    "src/kbash/gui/presets.py": 62.72,
+    "src/kbash/gui/presets.py": 60.67,
     "src/kbash/gui/ui_qt.py": 58.52,
     "src/kbash/main.py": 93.73
   }
