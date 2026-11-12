@@ -884,6 +884,18 @@ class Bridge(QObject):
             self._executor.cancel()
         self.ui.close()  # §7.4 — prompts pendentes viram cancel, sem travar o fim
 
+    @Slot(str, str, str, str, result=str)
+    def validateAnswer(self, kind: str, value: str, minimum: str, maximum: str) -> str:
+        """Erro de uma resposta number/date/time, pela regra do terminal; ``""`` se válida.
+
+        O QML chama antes de aceitar: o diálogo não fecha com valor que o terminal recusaria.
+        """
+        from ..core.model import erro_de_entrada
+
+        if kind not in ("number", "date", "time"):
+            return "tipo de resposta desconhecido"
+        return erro_de_entrada(kind, value, minimum, maximum)
+
     @Slot(str, "QVariant")
     def answer(self, request_id: str, value: Any) -> None:
         """Resposta do QML ao diálogo (§8.5)."""
