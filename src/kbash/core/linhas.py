@@ -32,7 +32,8 @@ class LeitorDeLinhas:
             raise ValueError("limite deve ser positivo")
         self._limite = limite
         self._resto = b""
-        self._descartando = False
+        # equivalente (mutante None): None e False são falsos; o código só testa truthiness
+        self._descartando = False  # pragma: no mutate
         self.descartadas = 0
 
     @ensure(
@@ -70,7 +71,8 @@ class LeitorDeLinhas:
         """Fim do fluxo: devolve o pendente sem quebra final, se couber no limite."""
         pendente = [] if self._descartando or not self._resto.strip() else [self._resto]
         self._resto = b""
-        self._descartando = False
+        # equivalente (mutante None): None e False são falsos; o código só testa truthiness
+        self._descartando = False  # pragma: no mutate
         return pendente
 
 

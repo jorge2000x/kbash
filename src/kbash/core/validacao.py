@@ -7,7 +7,8 @@ from .model import is_valid_date, is_valid_number, is_valid_time
 __all__ = ["erro_de_entrada"]
 
 
-def erro_de_entrada(kind: str, value: str, minimum: str = "", maximum: str = "") -> str:
+# equivalente (mutantes nos padrões): limite não numérico é ignorado, igual a ""
+def erro_de_entrada(kind: str, value: str, minimum: str = "", maximum: str = "") -> str:  # pragma: no mutate
     """Mensagem de erro para a resposta de um prompt ``number``/``date``/``time``; ``""`` se válida.
 
     Vazio é válido: significa "usar o padrão". Limite não numérico é ignorado.
@@ -37,4 +38,5 @@ def _erro_numero(texto: str, minimum: str, maximum: str) -> str:
 
 
 def _limite_valido(limite: str) -> bool:
-    return limite != "" and is_valid_number(limite)
+    # equivalente (mutante "XXXX"): não é número, então já cai em is_valid_number
+    return limite != "" and is_valid_number(limite)  # pragma: no mutate
