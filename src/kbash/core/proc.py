@@ -23,20 +23,31 @@ def start(
     env: Mapping[str, str],
     cwd: str,
     merge_stderr: bool = False,
+    entrada: bytes | None = None,
 ) -> subprocess.Popen[bytes]:
-    """Inicia ``argv`` numa sessão nova, sem entrada; saída e erro em pipes.
+    """Inicia ``argv`` numa sessão nova; saída e erro em pipes.
 
+    Sem ``entrada`` o stdin fica fechado. Com ela, o stdin é um pipe que recebe esses
+    bytes e fecha: é assim que segredos chegam a um comando root sem aparecer no argv.
     ``merge_stderr`` manda o erro para a mesma saída (uma ação não separa os dois).
     """
-    return subprocess.Popen(  # noqa: S603 - argv em lista, sem shell
+    process = subprocess.Popen(  # noqa: S603 - argv em lista, sem shell
         argv,
         env=dict(env),
         cwd=cwd,
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL if entrada is None else subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT if merge_stderr else subprocess.PIPE,
         start_new_session=True,
     )
+    if entrada is not None and process.stdin is not None:
+        with contextlib.suppress(BrokenPipeError):  # o comando pode ter morrido antes de ler
+            process.stdin.write(entrada)
+            process.stdin.flush()
+        with contextlib.suppress(BrokenPipeError):
+            process.stdin.close()
+        process.stdin = None  # fechado aqui: o Popen não pode tentar usá-lo de novo
+    return process
 
 
 def signal_group(process: subprocess.Popen[bytes], sig: int) -> None:

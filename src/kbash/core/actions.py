@@ -28,6 +28,7 @@ from .executor import (
 from . import proc
 from .model import Action, Script
 from .redacao import redige, segredos_do_script
+from .segredos_root import prepara_root
 from .planner import default_options, expand_value, option_visible
 
 __all__ = ["OUTPUT_LINES", "ActionResult", "action_env", "run_action"]
@@ -175,11 +176,12 @@ def run_action(
     ambiente_padrao(env)
     cwd = _cwd(env, workdir)
     argv: list[str] = ["bash", "--noprofile", "--norc", "-c", STEP_COMMAND]
-    if action.root and PRIVILEGE_ELEVATION:
-        argv = root_command(argv, env, cwd)
+    entrada: bytes | None = None
+    if action.root and PRIVILEGE_ELEVATION:  # §9.2 — senhas fora do argv, pelo stdin
+        argv, env, entrada = prepara_root(STEP_COMMAND, script, env, cwd, root_command)
     try:
         # argv em lista e sem shell (AGENTS.md); o comando root vem do pkexec, §9.2
-        process = proc.start(argv, env=env, cwd=cwd, merge_stderr=True)
+        process = proc.start(argv, env=env, cwd=cwd, merge_stderr=True, entrada=entrada)
     except (OSError, ValueError) as error:
         return ActionResult(action.id, "error", None, f"não foi possível iniciar: {error}")
     _notifica(on_start, process)

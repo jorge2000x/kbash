@@ -38,6 +38,7 @@ from .proc import GRACE_PERIOD
 from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
 from .redacao import redige
+from .segredos_root import prepara_root
 from .linhas import MAX_LOG_LINE, linhas_limitadas
 
 __all__ = [
@@ -91,6 +92,8 @@ class IpcChannel(Protocol):
     """Transporte de interação (§8) visto pelo executor."""
 
     directory: Path
+    #: respostas de prompts ``secret`` (§8.2), que o log não pode mostrar
+    segredos: list[str]
     #: variáveis de `rt_set` (§7.2), compartilhadas com o executor
     variables: dict[str, str]
     #: id do step atual, usado nas mensagens do IPC
@@ -363,12 +366,12 @@ class Executor:
     def _run_step(self, step: Step, index: int) -> StepResult:
         started = time.monotonic()
         env = self._build_env(step)
-        argv, cwd = self._build_argv(step, env)
+        argv, cwd, env_processo, entrada = self._build_argv(step, env)
         if self._ipc is not None:
             self._ipc.step_id = step.id
         self._emit(StepStarted(step.id, index, len(self.plan.selected)))
         try:
-            process = proc.start(argv, env=env, cwd=cwd)
+            process = proc.start(argv, env=env_processo, cwd=cwd, entrada=entrada)
         except (OSError, ValueError) as exc:  # ValueError: nome/valor de env inválido
             self._log(step.id, "kbash", f"não foi possível iniciar o step: {exc}", "error")
             return self._finish(step, StepState.FAILED, None, started, str(exc))
@@ -462,12 +465,19 @@ class Executor:
             return workdir
         return str(Path.cwd())
 
-    def _build_argv(self, step: Step, env: dict[str, str]) -> tuple[list[str], str]:
-        home = self._step_cwd(env)
+    def _build_argv(
+        self, step: Step, env: dict[str, str]
+    ) -> tuple[list[str], str, dict[str, str], bytes | None]:
+        """Devolve (argv, cwd, ambiente do processo, entrada do stdin).
+
+        Step root (§9.2): as senhas saem do ambiente e do argv e vão pelo stdin.
+        """
+        home = self._step_cwd(env)  # §7.1 — cwd = $HOME
         argv = ["bash", "--noprofile", "--norc", "-c", STEP_COMMAND]
         if step.root and PRIVILEGE_ELEVATION:  # §9.2 — elevação ligada
-            argv = self.root_command(argv, env, home)
-        return argv, home  # §7.1 — cwd = $HOME
+            argv, publico, entrada = prepara_root(STEP_COMMAND, self.script, env, home, self.root_command)
+            return argv, home, publico, entrada
+        return argv, home, env, None
 
     # -- leitura de streams ---------------------------------------------
     def _pump(self, stream: Any, step_id: str, name: str) -> None:
@@ -479,12 +489,15 @@ class Executor:
                 self._log(step_id, name, text, "error" if name == "stderr" else "info")
 
     def _segredos(self) -> list[str]:
-        """Valores atuais das opções ``password``: o que a linha de log não pode mostrar."""
-        return [
+        """Senhas (opções ``password``) e respostas de ``rt_secret``: o log não as mostra."""
+        valores = [
             self.plan.options.get(option.id, "")
             for option in self.script.options
             if option.type == "password"
         ]
+        if self._ipc is not None:
+            valores += self._ipc.segredos
+        return valores
 
     def _log(self, step_id: str | None, stream: str, text: str, level: str = "info") -> None:
         text = redige(text, self._segredos())

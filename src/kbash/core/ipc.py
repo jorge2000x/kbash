@@ -202,6 +202,7 @@ class IpcChannel:
         self._emit = emit
         self._processed = 0  # mensagens já lidas (usado por settle)
         self._pending: dict[str, _Pending] = {}
+        self.segredos: list[str] = []  # respostas de prompts secret (§8.2): o log não as mostra
         self._lock = threading.RLock()
         self._closed = False
         self._directory = self._make_dir(owner)
@@ -285,13 +286,20 @@ class IpcChannel:
 
     def respond(self, request_id: str, value: Any = CANCEL) -> None:
         """Responde um :class:`PromptRequest` e libera o script."""
-        with self._lock:
-            item = self._pending.pop(request_id, None)
+        item = self._retira_pendente(request_id, value)
         if item is None:
             return
         status, raw = format_answer(item.event, value)
         self._write(request_id, status, raw)
         item.done.set()
+
+    def _retira_pendente(self, request_id: str, value: Any) -> _Pending | None:
+        """Tira o pedido da fila; se era ``secret``, guarda a resposta para o log escondê-la."""
+        with self._lock:
+            item = self._pending.pop(request_id, None)
+            if item is not None and item.event.secret and isinstance(value, str) and value:
+                self.segredos.append(value)
+            return item
 
     def settle(self, max_wait: float = 0.5) -> None:
         """Espera o que já chegou no FIFO ser processado.
