@@ -43,6 +43,12 @@ def test_linha_parcial_no_fim_sai_so_em_fecha() -> None:
     assert leitor.fecha() == []
 
 
+def test_fecha_ignora_pendente_so_com_espacos() -> None:
+    leitor = LeitorDeLinhas(limite=10)
+    leitor.alimenta(b"   ")
+    assert leitor.fecha() == []
+
+
 def test_fecha_descarta_resto_longo() -> None:
     leitor = LeitorDeLinhas(limite=3)
     leitor.alimenta(b"abcdefgh")
