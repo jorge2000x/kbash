@@ -14,6 +14,7 @@ from .errors import Diagnostics, ParseError, ValidationError
 from .model import (
     RUNTIME_VERSION_SUPPORTED,
     Script,
+    is_safe_script_id,
     is_valid_id,
     slugify,
 )
@@ -310,8 +311,14 @@ class _Parser(_OpcoesMixin, _PassosMixin):
             raise ParseError("diretiva obrigatória ausente: #@name", path, None)
         self._name = " ".join(_tokenize(self.header["name"], self.header_lines["name"], path))
         raw_id = _unquote(self.header.get("id", "").strip())
-        if raw_id and not is_valid_id(raw_id.replace(".", "_")) and "." not in raw_id:
-            self.diag.warning(f"#@id {raw_id!r} fora do padrão esperado", self.header_lines["id"])
+        # o id vira parte de caminhos (diretório de trabalho e IPC): só segmento seguro
+        if raw_id and not is_safe_script_id(raw_id):
+            raise ParseError(
+                f"#@id {raw_id!r} inválido: use letras, dígitos, '.', '_' ou '-' (até 64 caracteres), "
+                "sem '/', espaço ou '..'",
+                path,
+                self.header_lines["id"],
+            )
         self._id = raw_id or slugify(self._name)
         requires_raw = self.header.get("requires", "")
         self._requires = tuple(

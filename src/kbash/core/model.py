@@ -62,6 +62,15 @@ def is_valid_id(value: str) -> bool:
     return bool(ID_RE.match(value))
 
 
+#: §4.2: id do script — letras, dígitos e ``._-``, começa com letra ou dígito,
+#: até 64 caracteres. Aceita id reverso (``com.exemplo.app``); recusa ``/``, espaço e ``..``.
+SCRIPT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def is_safe_script_id(value: str) -> bool:
+    return bool(SCRIPT_ID_RE.match(value)) and ".." not in value
+
+
 def slugify(name: str) -> str:
     """§4.2: ID padrão = slug do nome (usado quando ``#@id`` falta)."""
     ascii_only = name.encode("ascii", "ignore").decode("ascii")
