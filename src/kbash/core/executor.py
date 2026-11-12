@@ -37,6 +37,7 @@ from .ipc import valid_var_key
 from .proc import GRACE_PERIOD
 from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
+from .linhas import MAX_LOG_LINE, linhas_limitadas
 
 __all__ = [
     "GRACE_PERIOD",
@@ -455,8 +456,10 @@ class Executor:
         if stream is None:
             return
         with stream:
-            for raw in iter(stream.readline, b""):
+            for raw, truncada in linhas_limitadas(stream, MAX_LOG_LINE):
                 text = raw.decode("utf-8", errors="replace").rstrip("\n")
+                if truncada:
+                    text += " [linha truncada]"
                 self._log(step_id, name, text, "error" if name == "stderr" else "info")
 
     def _log(self, step_id: str | None, stream: str, text: str, level: str = "info") -> None:

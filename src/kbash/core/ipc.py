@@ -26,6 +26,7 @@ from typing import Any
 from .contratos import ensure, require
 from .errors import KbashError
 from .events import EventSink, LogLine, Notify, Progress, ProgressWin, PromptRequest
+from .linhas import MAX_IPC_LINE, LeitorDeLinhas
 
 __all__ = [
     "CANCEL",
@@ -308,7 +309,7 @@ class IpcChannel:
 
     # -- leitura (script → runtime) --------------------------------------
     def _read_loop(self) -> None:
-        buffer = b""
+        leitor = LeitorDeLinhas(MAX_IPC_LINE)  # linha acima do teto é descartada, não acumulada
         while not self._closed:
             try:
                 chunk = os.read(self._out_fd, 65536)
@@ -320,12 +321,11 @@ class IpcChannel:
             if not chunk:
                 threading.Event().wait(0.02)
                 continue
-            buffer += chunk
-            while b"\n" in buffer:
-                line, _, buffer = buffer.partition(b"\n")
+            for line in leitor.alimenta(chunk):
                 self._handle_line(line)
-        if buffer.strip():
-            self._handle_line(buffer)
+        for line in leitor.fecha():
+            if line.strip():
+                self._handle_line(line)
 
     def _handle_line(self, raw: bytes) -> None:
         """Processa uma linha; nenhuma mensagem malformada pode matar o leitor.
