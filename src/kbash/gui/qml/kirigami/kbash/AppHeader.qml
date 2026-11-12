@@ -66,6 +66,7 @@ ToolBar {
             text: qsTr("Log da execução")
             display: AbstractButton.IconOnly
             iconGlyph: "utilities-log-viewer"
+            visible: bridge.page >= 2  // só há log na execução e no resultado
             variant: "flat"
             Layout.alignment: Qt.AlignVCenter
             onClicked: bridge.logDrawerOpen = !bridge.logDrawerOpen

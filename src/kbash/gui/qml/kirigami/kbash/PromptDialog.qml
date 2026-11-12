@@ -202,6 +202,9 @@ AppDialog {
         else if (kind === "time") timeField.forceActiveFocus()
         else if (kind === "file") fileField.forceActiveFocus()
         else if (kind === "text") textArea.forceActiveFocus()
+        // confirmação com padrão Não: o foco vai para o Não, para que Enter não
+        // confirme uma ação destrutiva por engano (HIG: o padrão é o botão focado)
+        else if (isConfirm && !defaultYes) refuseFocusItem.forceActiveFocus()
         // teclado: Enter aceita; sem foco inicial só o mouse responde
         else defaultButton.forceActiveFocus()
     }

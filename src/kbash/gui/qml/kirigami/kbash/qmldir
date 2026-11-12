@@ -23,6 +23,7 @@ AppProgressBar 1.0 AppProgressBar.qml
 AppRadioButton 1.0 AppRadioButton.qml
 AppSlider 1.0 AppSlider.qml
 AppTextArea 1.0 AppTextArea.qml
+OutputPanel 1.0 OutputPanel.qml
 AppScrollView 1.0 AppScrollView.qml
 LogDrawer 1.0 LogDrawer.qml
 ProgressWinDialog 1.0 ProgressWinDialog.qml

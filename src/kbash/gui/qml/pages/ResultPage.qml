@@ -54,6 +54,7 @@ AppPage {
                 group: model.group
                 checked: model.checked
                 locked: true
+                selectable: false
                 status: model.status
                 needsRoot: model.root
                 duration: model.duration
@@ -69,25 +70,6 @@ AppPage {
             visible: bridge.stepCount === 0
             text: qsTr("Nenhuma etapa rodou")
             explanation: qsTr("Nada foi selecionado ou a execução não começou.")
-        }
-    }
-
-    // -- ver log --------------------------------------------------------
-    // Reusa o LogPanel (o mesmo da gaveta): antes era ScrollView +
-    // TextEdit desenhados aqui, duplicando código e visual.
-    AppDialog {
-        id: logDialog
-        dialogTitle: qsTr("Log da execução")
-        width: Math.max(0, Math.min(900, page.width - 80))
-        height: Math.max(0, Math.min(560, page.height - 120))
-        acceptVisible: false
-        rejectText: qsTr("Fechar")
-
-        LogPanel {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 380
-            autoScroll: false
-            onCopyRequested: bridge.copyToClipboard(bridge.logText())
         }
     }
 
@@ -110,7 +92,8 @@ AppPage {
         AppButton {
             text: qsTr("Ver log")
             enabled: bridge.logCount > 0
-            onClicked: logDialog.open()
+            // mesma gaveta de log da execução (uma só forma de ver o log)
+            onClicked: bridge.logDrawerOpen = true
         }
         AppButton {
             text: qsTr("Salvar log")

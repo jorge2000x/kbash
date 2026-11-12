@@ -75,6 +75,7 @@ Kirigami.ApplicationWindow {
         icon.name: "utilities-log-viewer"
         shortcut: "Ctrl+L"
         checkable: true
+        enabled: bridge.page >= 2  // o log só existe na execução e no resultado
         checked: bridge.logDrawerOpen
         onTriggered: bridge.logDrawerOpen = !bridge.logDrawerOpen
     }
@@ -86,18 +87,6 @@ Kirigami.ApplicationWindow {
         enabled: bridge.page > 0
         // o goToPage ignora saída da execução em andamento e índices fora de 0..3
         onTriggered: bridge.goToPage(bridge.page - 1)
-    }
-    Action {
-        id: configureShortcutsAction
-        text: qsTr("Configurar atalhos…")
-        icon.name: "configure-shortcuts"
-        enabled: false  // ainda não implementado; desabilitado, não escondido
-    }
-    Action {
-        id: aboutAction
-        text: qsTr("Sobre o kbash")
-        icon.name: "help-about"
-        enabled: false  // ainda não implementado; desabilitado, não escondido
     }
 
     menuBar: MenuBar {
@@ -113,14 +102,6 @@ Kirigami.ApplicationWindow {
             title: qsTr("Exibir")
             MenuItem { action: logAction }
             MenuItem { action: backAction }
-        }
-        Menu {
-            title: qsTr("Configurações")
-            MenuItem { action: configureShortcutsAction }
-        }
-        Menu {
-            title: qsTr("Ajuda")
-            MenuItem { action: aboutAction }
         }
     }
 
@@ -192,9 +173,6 @@ Kirigami.ApplicationWindow {
         target: bridge
         function onNotifyRaised(text, level) {
             window.showPassiveNotification(text, level === "error" || level === "warn" ? "long" : "short")
-        }
-        function onRunFinishedSignal(status, message) {
-            window.showPassiveNotification(message, status === "failed" || status === "cancelled" ? "long" : "short")
         }
         // "Desfazer" reverte a exclusão de predefinição (bridge.undoDeletePreset)
         function onPresetDeleted(name) {

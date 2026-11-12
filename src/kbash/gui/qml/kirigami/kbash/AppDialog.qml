@@ -25,6 +25,8 @@ Kirigami.Dialog {
     // para foco de teclado: Enter confirma (§8.2 — o input já
     // tinha Enter; choice/confirm não tinham nada focado).
     property alias defaultButton: acceptButton
+    // foco quando o padrão é recusar (Não): o prompt de confirmação usa
+    property alias refuseFocusItem: refuseButton
 
     // O QML não distingue "recusar" de "rejeitar": quem responde é o Signal.
     signal refused()
