@@ -121,35 +121,6 @@ def is_valid_time(value: str) -> bool:
     return True
 
 
-def erro_de_entrada(kind: str, value: str, minimum: str = "", maximum: str = "") -> str:
-    """Mensagem de erro para a resposta de um prompt ``number``/``date``/``time``; ``""`` se válida.
-
-    Fonte única para o terminal (``core/ui.py``) e o QML (via ``bridge.validateAnswer``).
-    Vazio é válido: significa "usar o padrão". Limite não numérico é ignorado.
-    """
-    texto = value.strip()
-    if kind == "number":
-        if texto == "":
-            return ""
-        if not is_valid_number(texto):
-            return "digite um número"
-        numero = float(texto)
-        if minimum != "" and is_valid_number(minimum) and numero < float(minimum):
-            return f"mínimo: {minimum}"
-        if maximum != "" and is_valid_number(maximum) and numero > float(maximum):
-            return f"máximo: {maximum}"
-        return ""
-    if kind == "date":
-        if texto == "" or is_valid_date(texto):
-            return ""
-        return "formato inválido (use AAAA-MM-DD)"
-    if kind == "time":
-        if texto == "" or is_valid_time(texto):
-            return ""
-        return "formato inválido (use HH:MM)"
-    raise ValueError(f"tipo de prompt sem validação: {kind!r}")
-
-
 def is_allowed_link(url: str) -> bool:
     """§4.3: ``link`` só abre ``http://`` ou ``https://`` com host e sem espaços/controles."""
     text = url.strip()

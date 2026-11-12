@@ -68,7 +68,7 @@ class LeitorDeLinhas:
 
     def fecha(self) -> list[bytes]:
         """Fim do fluxo: devolve o pendente sem quebra final, se couber no limite."""
-        pendente = [] if self._descartando or not self._resto else [self._resto]
+        pendente = [] if self._descartando or not self._resto.strip() else [self._resto]
         self._resto = b""
         self._descartando = False
         return pendente

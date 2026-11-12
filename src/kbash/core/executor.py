@@ -205,6 +205,11 @@ def precheck(
     return problems
 
 
+def _texto_da_linha(raw: bytes, truncada: bool) -> str:
+    text = raw.decode("utf-8", errors="replace").rstrip("\n")
+    return text + " [linha truncada]" if truncada else text
+
+
 class Executor:
     """Executa um :class:`RunPlan` emitindo eventos (§7.3)."""
 
@@ -457,9 +462,7 @@ class Executor:
             return
         with stream:
             for raw, truncada in linhas_limitadas(stream, MAX_LOG_LINE):
-                text = raw.decode("utf-8", errors="replace").rstrip("\n")
-                if truncada:
-                    text += " [linha truncada]"
+                text = _texto_da_linha(raw, truncada)
                 self._log(step_id, name, text, "error" if name == "stderr" else "info")
 
     def _log(self, step_id: str | None, stream: str, text: str, level: str = "info") -> None:

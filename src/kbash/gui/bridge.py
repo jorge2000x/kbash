@@ -890,7 +890,7 @@ class Bridge(QObject):
 
         O QML chama antes de aceitar: o diálogo não fecha com valor que o terminal recusaria.
         """
-        from ..core.model import erro_de_entrada
+        from ..core.validacao import erro_de_entrada
 
         if kind not in ("number", "date", "time"):
             return "tipo de resposta desconhecido"
@@ -1262,6 +1262,14 @@ class Bridge(QObject):
         return self._log_model.rowCount()
 
     @Slot()
+    def _encerra_acao(self) -> None:
+        """Ação em andamento não sobrevive à janela: SIGTERM no grupo, depois SIGKILL."""
+        process = self._action_process
+        if process is not None and process.poll() is None:
+            proc.stop(process)
+        if self._action_thread is not None and self._action_thread.is_alive():
+            self._action_thread.join(timeout=2)
+
     def shutdown(self) -> None:
         """Encerra tudo (usado no fechamento da janela e nos testes)."""
         if self._shutdown_done:
@@ -1269,12 +1277,7 @@ class Bridge(QObject):
         self._shutdown_done = True
         self.cancel()
         self.ui.close()  # §7.4 — prompts pendentes viram cancel
-        # ação em andamento não sobrevive à janela: SIGTERM no grupo, depois SIGKILL
-        process = self._action_process
-        if process is not None and process.poll() is None:
-            proc.stop(process)
-        if self._action_thread is not None and self._action_thread.is_alive():
-            self._action_thread.join(timeout=2)
+        self._encerra_acao()
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=2)
         self._timer.stop()

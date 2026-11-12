@@ -263,7 +263,7 @@ class TerminalUi:
 
     # -- number / date / time / file / text / textbox ---------------------
     def _number(self, prompt: Prompt) -> str:
-        from .model import erro_de_entrada
+        from .validacao import erro_de_entrada
 
         hint = f" [{prompt.default}]" if prompt.default not in (None, "") else ""
         bounds = ""
@@ -280,7 +280,7 @@ class TerminalUi:
             return raw
 
     def _dated(self, prompt: Prompt, which: str) -> str:
-        from .model import erro_de_entrada
+        from .validacao import erro_de_entrada
 
         expected = "AAAA-MM-DD" if which == "date" else "HH:MM"
         hint = f" [{prompt.default}]" if prompt.default not in (None, "") else ""

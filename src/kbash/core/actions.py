@@ -113,6 +113,14 @@ def _tail(text: str) -> str:
     return "\n".join(deque(text.splitlines(), maxlen=OUTPUT_LINES))
 
 
+def _notifica(
+    on_start: Callable[[subprocess.Popen[bytes]], None] | None,
+    process: subprocess.Popen[bytes],
+) -> None:
+    if on_start is not None:
+        on_start(process)
+
+
 @ensure(
     lambda result: result.status in ("ok", "failed", "timeout", "error"),
     "status de ação é um dos quatro valores (§4.8)",
@@ -125,6 +133,7 @@ def _tail(text: str) -> str:
     lambda result: len(result.output.splitlines()) <= OUTPUT_LINES,
     "a saída devolvida tem no máximo OUTPUT_LINES linhas",
 )
+
 def run_action(
     script: Script,
     action: Action,
@@ -170,8 +179,7 @@ def run_action(
         process = proc.start(argv, env=env, cwd=cwd, merge_stderr=True)
     except (OSError, ValueError) as error:
         return ActionResult(action.id, "error", None, f"não foi possível iniciar: {error}")
-    if on_start is not None:
-        on_start(process)
+    _notifica(on_start, process)
 
     status = "ok"
     try:
