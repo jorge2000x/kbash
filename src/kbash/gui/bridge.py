@@ -11,6 +11,7 @@ modelos/propriedades — nenhum ``QAbstractListModel`` é tocado de fora (§10.3
 from __future__ import annotations
 
 import queue
+import subprocess
 import tempfile
 import threading
 from pathlib import Path
@@ -33,6 +34,7 @@ from ..core.events import (
 )
 from ..core.errors import KbashError
 from ..core.actions import run_action
+from ..core import proc
 from ..core.executor import (
     PRIVILEGE_ELEVATION,
     Executor,
@@ -158,6 +160,9 @@ class Bridge(QObject):
         self._blocked: dict[str, str] = {}
         self._precheck_problems: list[str] = []
         self._shutdown_done = False
+        # ação em andamento: o processo e a thread, para encerrar no fechamento
+        self._action_process: subprocess.Popen[bytes] | None = None
+        self._action_thread: threading.Thread | None = None
         # -- portal de arquivos (§10.1): um pedido por vez (o diálogo
         # nativo é modal, então não há concorrência real)
         self._portal_token: str | None = None
@@ -445,13 +450,19 @@ class Bridge(QObject):
                         result = run_action(
                             script, action, values, selected,
                             helpers=helpers_path(), assets=assets, workdir=tmp,
+                            on_start=self._guarda_processo_da_acao,
                         )
                     status, code, output = result.status, result.exit_code, result.output
             except Exception as exc:
                 output = str(exc)
+            self._action_process = None
             self._actionDone.emit(action_id, status, -1 if code is None else code, output)
 
-        threading.Thread(target=worker, name="kbash-action", daemon=True).start()
+        self._action_thread = threading.Thread(target=worker, name="kbash-action", daemon=True)
+        self._action_thread.start()
+
+    def _guarda_processo_da_acao(self, process: subprocess.Popen[bytes]) -> None:
+        self._action_process = process
 
     def _on_action_done(self, action_id: str, status: str, code: int, output: str) -> None:
         state = self._actions.get(action_id)
@@ -1246,6 +1257,12 @@ class Bridge(QObject):
         self._shutdown_done = True
         self.cancel()
         self.ui.close()  # §7.4 — prompts pendentes viram cancel
+        # ação em andamento não sobrevive à janela: SIGTERM no grupo, depois SIGKILL
+        process = self._action_process
+        if process is not None and process.poll() is None:
+            proc.stop(process)
+        if self._action_thread is not None and self._action_thread.is_alive():
+            self._action_thread.join(timeout=2)
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=2)
         self._timer.stop()

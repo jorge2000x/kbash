@@ -135,8 +135,12 @@ def run_action(
     assets: Path | None = None,
     workdir: str = "",
     root_command: RootCommand = default_root_command,
+    on_start: Callable[[subprocess.Popen[bytes]], None] | None = None,
 ) -> ActionResult:
     """§4.8/§7.6 — roda a ação e espera (até ``action.timeout``).
+
+    ``on_start`` recebe o processo logo depois de iniciado: quem precisa encerrar a
+    ação de fora (fechar a janela) guarda essa referência e usa ``proc.stop``.
 
     Bloqueante: a GUI chama numa thread. ``#@root true`` passa pelo pkexec
     (§9.2); a autorização é pedida antes, pela GUI.
@@ -166,6 +170,8 @@ def run_action(
         process = proc.start(argv, env=env, cwd=cwd, merge_stderr=True)
     except (OSError, ValueError) as error:
         return ActionResult(action.id, "error", None, f"não foi possível iniciar: {error}")
+    if on_start is not None:
+        on_start(process)
 
     status = "ok"
     try:
