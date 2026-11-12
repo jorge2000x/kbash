@@ -263,7 +263,7 @@ class TerminalUi:
 
     # -- number / date / time / file / text / textbox ---------------------
     def _number(self, prompt: Prompt) -> str:
-        from .model import is_valid_number
+        from .model import erro_de_entrada
 
         hint = f" [{prompt.default}]" if prompt.default not in (None, "") else ""
         bounds = ""
@@ -273,30 +273,24 @@ class TerminalUi:
             raw = self._read(f"{prompt.label}{hint}{bounds}: ").strip()
             if not raw:
                 return "" if prompt.default in (None, "") else str(prompt.default)
-            if not is_valid_number(raw):
-                print("digite um número", file=self._err)
-                continue
-            number = float(raw)
-            if prompt.minimum != "" and number < float(prompt.minimum):
-                print(f"mínimo: {prompt.minimum}", file=self._err)
-                continue
-            if prompt.maximum != "" and number > float(prompt.maximum):
-                print(f"máximo: {prompt.maximum}", file=self._err)
+            erro = erro_de_entrada("number", raw, prompt.minimum, prompt.maximum)
+            if erro:
+                print(erro, file=self._err)
                 continue
             return raw
 
     def _dated(self, prompt: Prompt, which: str) -> str:
-        from .model import is_valid_date, is_valid_time
+        from .model import erro_de_entrada
 
-        valid = is_valid_date if which == "date" else is_valid_time
         expected = "AAAA-MM-DD" if which == "date" else "HH:MM"
         hint = f" [{prompt.default}]" if prompt.default not in (None, "") else ""
         while True:
             raw = self._read(f"{prompt.label}{hint} ({expected}): ").strip()
             if not raw:
                 return "" if prompt.default in (None, "") else str(prompt.default)
-            if not valid(raw):
-                print(f"formato inválido (use {expected})", file=self._err)
+            erro = erro_de_entrada(which, raw)
+            if erro:
+                print(erro, file=self._err)
                 continue
             return raw
 
