@@ -64,6 +64,7 @@ source_paths = [
     "src/kbash/core/linhas.py",
     "src/kbash/core/redacao.py",
     "src/kbash/core/validacao.py",
+    "src/kbash/core/segredos_root.py",
 ]
 # só os testes do core: GUI (Qt) fica fora da mutação (SPEC §16.1)
 pytest_add_cli_args_test_selection = [
@@ -82,4 +83,5 @@ pytest_add_cli_args_test_selection = [
     "tests/test_linhas.py",
     "tests/test_redacao_saida.py",
     "tests/test_erro_de_entrada.py",
+    "tests/test_root_e_segredos.py",
 ]
