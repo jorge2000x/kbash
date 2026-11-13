@@ -21,6 +21,15 @@ VENV="${VENV:-/tmp/venv}"
 DEBS="${DEBS:-/tmp/debs/x}"
 # Python de onde sai o binário e a stdlib do AppDir. O padrão é o da máquina Ubuntu;
 # no runner do GitHub o gui-completo.sh passa o do próprio venv (setup-python).
+# Arquitetura do bundle: x86_64 (padrão) ou aarch64. Define o triplet das libs do
+# sistema (Ubuntu) e o ARCH do appimagetool. O ICU pré-compilado é só x86_64.
+ARCH_KBASH="${ARCH_KBASH:-x86_64}"
+case "$ARCH_KBASH" in
+    x86_64)  TRIPLE=x86_64-linux-gnu ;;
+    aarch64) TRIPLE=aarch64-linux-gnu ;;
+    *) echo "erro: ARCH_KBASH deve ser x86_64 ou aarch64 (é: $ARCH_KBASH)" >&2; exit 1 ;;
+esac
+export ARCH_TRIPLE="$TRIPLE"
 PY_BIN="${PY_BIN:-/usr/bin/python3.11}"
 PY_STD="${PY_STD:-/usr/lib/python3.11}"
 BUILD="${BUILD:-/tmp/appdir}"
@@ -237,20 +246,20 @@ fi
 #    linka IconThemes -> BreezeIcons (~3 MB comprimido, mantido para os ícones
 #    funcionarem fora do KDE), ColorScheme, ConfigCore/Gui, I18n, Archive.
 log "Kirigami + Breeze (Ubuntu 26.04, Qt 6.10.2)"
-LIBDIR="$APP/lib/x86_64-linux-gnu"
+LIBDIR="$APP/lib/$TRIPLE"
 mkdir -p "$LIBDIR" "$APP/lib/qml/org/kde"
 for pat in 'libKirigami*.so.6*' 'libKF6*.so.6*' 'libwayland-client.so.0*'; do
-    cp -a "$DEBS"/usr/lib/x86_64-linux-gnu/$pat "$LIBDIR/" 2>/dev/null || true
+    cp -a "$DEBS"/usr/lib/$TRIPLE/$pat "$LIBDIR/" 2>/dev/null || true
 done
 for modulo in kirigami breeze guiaddons; do
-    origem="$DEBS/usr/lib/x86_64-linux-gnu/qt6/qml/org/kde/$modulo"
+    origem="$DEBS/usr/lib/$TRIPLE/qt6/qml/org/kde/$modulo"
     [ -d "$origem" ] || { echo "erro: módulo QML org.kde.$modulo ausente em \$DEBS" >&2; exit 1; }
     cp -a "$origem" "$APP/lib/qml/org/kde/"
 done
 [ -f "$APP/lib/qml/org/kde/breeze/qmldir" ] || { echo "erro: org.kde.breeze sem qmldir" >&2; exit 1; }
 
 mkdir -p "$APP/lib/qtplugins/kf6/kirigami/platform"
-cp -a "$DEBS/usr/lib/x86_64-linux-gnu/qt6/plugins/kf6/kirigami/platform/org.kde.breeze.so" \
+cp -a "$DEBS/usr/lib/$TRIPLE/qt6/plugins/kf6/kirigami/platform/org.kde.breeze.so" \
       "$APP/lib/qtplugins/kf6/kirigami/platform/" \
     || { echo "erro: plugin de plataforma do Kirigami (org.kde.breeze.so) ausente" >&2; exit 1; }
 
@@ -278,7 +287,7 @@ APPDIR="\$HERE"
 
 export PYTHONHOME="\$APPDIR/usr"
 export PYTHONPATH="\$APPDIR:\$APPDIR/usr/lib/python3.11/site-packages"
-export LD_LIBRARY_PATH="\$APPDIR/usr/lib/x86_64-linux-gnu:\$APPDIR/usr/lib/python3.11/site-packages/PySide6/Qt/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="\$APPDIR/usr/lib/$TRIPLE:\$APPDIR/usr/lib/python3.11/site-packages/PySide6/Qt/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 export QML2_IMPORT_PATH="\$APPDIR/usr/lib/qml:\$APPDIR/usr/lib/python3.11/site-packages/PySide6/Qt/qml\${QML2_IMPORT_PATH:+:\$QML2_IMPORT_PATH}"
 export QT_PLUGIN_PATH="\$APPDIR/usr/lib/qtplugins:\$APPDIR/usr/lib/python3.11/site-packages/PySide6/Qt/plugins"
 export QT_QPA_PLATFORM_PLUGIN_PATH="\$QT_PLUGIN_PATH/platforms"
@@ -369,27 +378,13 @@ exit \$_rc
 APPRUN
 chmod +x "$BUILD/AppRun"
 
-# o icone: PNG 256x256 gerado na hora (o .desktop aponta pra kbash)
+# o ícone: SVG do repositório, na raiz do AppDir (o .desktop aponta pra kbash) e
+# no tema hicolor, de onde a janela o lê (gui/library.py: icone_do_bundle)
 log "ícone"
-python3 - "$BUILD/kbash.png" <<'ICO'
-import zlib, struct, sys
-W = H = 256
-px = bytearray()
-for y in range(H):
-    px.append(0)
-    for x in range(W):
-        d = ((x - 128) ** 2 + (y - 128) ** 2) ** 0.5
-        if d < 96:   px += bytes((26, 32, 44, 255))
-        elif d < 112: px += bytes((61, 174, 233, 255))
-        else:        px += bytes((0, 0, 0, 0))
-def chunk(t, d):
-    return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
-open(sys.argv[1], "wb").write(
-    b"\x89PNG\r\n\x1a\n"
-    + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 6, 0, 0, 0))
-    + chunk(b"IDAT", zlib.compress(bytes(px), 9))
-    + chunk(b"IEND", b""))
-ICO
+ICONE="$REPO/packaging/icons/kbash.svg"
+[ -f "$ICONE" ] || { echo "erro: ícone ausente em $ICONE" >&2; exit 1; }
+install -Dm644 "$ICONE" "$BUILD/kbash.svg"
+install -Dm644 "$ICONE" "$APP/share/icons/hicolor/scalable/apps/kbash.svg"
 cat > "$BUILD/kbash.desktop" <<'DESK'
 [Desktop Entry]
 Type=Application
@@ -398,6 +393,11 @@ Exec=AppRun
 Icon=kbash
 Categories=Utility;
 MimeType=application/x-kbash;
+Actions=Escolher;
+
+[Desktop Action Escolher]
+Name=Escolher outro script
+Exec=AppRun home
 DESK
 # tipo MIME da extensão .kbash (o sistema registra ao integrar o AppImage)
 mkdir -p "$APP/share/mime/packages"
@@ -410,7 +410,9 @@ cp "$REPO/packaging/kbash.xml" "$APP/share/mime/packages/kbash.xml"
 # só de en/pt (tools/build-icu-data.sh), ele substitui o do wheel. Mesmo soname
 # e símbolos _73: o Qt carrega sem mudança. Corte: ~25 MB.
 PS_LIB="$APP/lib/python3.11/site-packages/PySide6/Qt/lib"
-if [ -n "${ICU_DATA_SO:-}" ]; then
+if [ -n "${ICU_DATA_SO:-}" ] && [ "$ARCH_KBASH" != x86_64 ]; then
+    log "ICU_DATA_SO ignorado: o libicudata pré-compilado é x86_64 ($ARCH_KBASH)"
+elif [ -n "${ICU_DATA_SO:-}" ]; then
     [ -f "$ICU_DATA_SO" ] || { echo "erro: ICU_DATA_SO não existe: $ICU_DATA_SO" >&2; exit 1; }
     log "ICU filtrado (en+pt) no lugar do libicudata do wheel"
     cp -f "$ICU_DATA_SO" "$PS_LIB/libicudata.so.73"
@@ -450,15 +452,15 @@ MKSQ=(--mksquashfs-opt -Xcompression-level --mksquashfs-opt 22
       --mksquashfs-opt -b --mksquashfs-opt 1M)
 if [ -n "${APPIMAGETOOL:-}" ] && [ -x "$APPIMAGETOOL" ]; then
     if [ -n "${RUNTIME_FILE:-}" ]; then
-        ARCH=x86_64 "$APPIMAGETOOL" --no-appstream "${MKSQ[@]}" --runtime-file "$RUNTIME_FILE" "$BUILD" "$SAIDA"
+        ARCH=$ARCH_KBASH "$APPIMAGETOOL" --no-appstream "${MKSQ[@]}" --runtime-file "$RUNTIME_FILE" "$BUILD" "$SAIDA"
     else
-        ARCH=x86_64 "$APPIMAGETOOL" --no-appstream "${MKSQ[@]}" "$BUILD" "$SAIDA"
+        ARCH=$ARCH_KBASH "$APPIMAGETOOL" --no-appstream "${MKSQ[@]}" "$BUILD" "$SAIDA"
     fi
 elif command -v appimagetool >/dev/null 2>&1; then
-    ARCH=x86_64 appimagetool --no-appstream "${MKSQ[@]}" "$BUILD" "$SAIDA"
+    ARCH=$ARCH_KBASH appimagetool --no-appstream "${MKSQ[@]}" "$BUILD" "$SAIDA"
 else
     echo "erro: appimagetool não encontrado. Baixe de" >&2
-    echo "  https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" >&2
+    echo "  https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$ARCH_KBASH.AppImage" >&2
     echo "e extraia com --appimage-extract, ou aponte APPIMAGETOOL=<caminho>." >&2
     echo "O AppDir está pronto em $BUILD — só falta empacotar." >&2
     exit 1

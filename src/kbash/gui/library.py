@@ -8,9 +8,11 @@ Só leitura estática: cada arquivo passa pelo parser, que não executa nada.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..core.contratos import ensure
 from ..core.errors import KbashError
 from ..core.parser import parse_script
 
@@ -19,6 +21,21 @@ LIBRARY_SUFFIX = ".kbash"
 
 #: Fora do AppImage (desenvolvimento): ``src/kbash/gui/library.py`` → raiz → ``examples/``.
 DEV_SCRIPTS_DIR = Path(__file__).resolve().parents[3] / "examples"
+
+
+#: Onde o build do AppImage copia o ícone SVG, relativo a ``$APPDIR`` (§10.0).
+ICONE_RELATIVO_AO_BUNDLE = Path("usr/share/icons/hicolor/scalable/apps/kbash.svg")
+
+
+@ensure(lambda result: result is None or result.suffix == ".svg", "ícone do bundle é SVG")
+def icone_do_bundle(environ: Mapping[str, str] | None = None) -> Path | None:
+    """Caminho do ícone SVG embutido no AppImage, ou None fora dele ou sem o arquivo."""
+    env = os.environ if environ is None else environ
+    appdir = env.get("APPDIR", "")
+    if not appdir:
+        return None
+    arquivo = Path(appdir) / ICONE_RELATIVO_AO_BUNDLE
+    return arquivo if arquivo.is_file() else None
 
 
 def program_scripts_dir() -> Path:

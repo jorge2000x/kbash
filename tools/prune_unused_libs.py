@@ -17,6 +17,7 @@ aquilo — por isso o build roda a suíte de smoke depois.
 """
 import re
 import subprocess
+import os
 import sys
 from pathlib import Path
 
@@ -35,7 +36,8 @@ def main() -> int:
     dry = "--dry-run" in sys.argv
     site = app / "usr/lib/python3.11/site-packages"
     ps = site / "PySide6"
-    lib_dirs = [app / "usr/lib/x86_64-linux-gnu", ps / "Qt/lib"]
+    triplet = os.environ.get("ARCH_TRIPLE", "x86_64-linux-gnu")
+    lib_dirs = [app / "usr/lib" / triplet, ps / "Qt/lib"]
 
     roots = []
     roots += list(ps.glob("*.abi3.so")) + list((site / "shiboken6").glob("*.so*"))

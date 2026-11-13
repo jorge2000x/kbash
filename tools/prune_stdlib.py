@@ -21,7 +21,8 @@ from pathlib import Path
 
 SEEDS = {
     "site", "os", "stat", "posixpath", "genericpath", "abc", "codecs", "io",
-    "encodings", "_collections_abc", "_sitebuiltins", "_sysconfigdata__linux_x86_64-linux-gnu",
+    "encodings", "_collections_abc", "_sitebuiltins",
+    "_sysconfigdata__linux_x86_64-linux-gnu", "_sysconfigdata__linux_aarch64-linux-gnu",
     "zipimport", "importlib", "types", "functools", "operator", "keyword",
     "reprlib", "collections", "re", "enum", "warnings", "linecache", "traceback",
     "tokenize", "token", "weakref", "copyreg", "struct", "sre_compile",
