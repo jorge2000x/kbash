@@ -21,7 +21,13 @@ rt__loaded() { [ -n "${RT_HELPER_VERSION:-}" ]; }
 
 rt__ipc_open() {
     [ "$_RT_FD" = 1 ] && return 0
-    if [ -n "${RT_IPC:-}" ] && [ -p "${RT_IPC}/out" ] && [ -p "${RT_IPC}/in" ]; then
+    # Symlink é recusado antes de qualquer abertura: `-p` segue o link, e um canal
+    # apontando para FIFO de outro processo receberia as mensagens dele. A checagem
+    # e a abertura não são atômicas; a correção completa é o supervisor root criar
+    # o diretório IPC (ver análise de segurança).
+    if [ -n "${RT_IPC:-}" ] && [ ! -L "${RT_IPC}" ] \
+        && [ ! -L "${RT_IPC}/out" ] && [ ! -L "${RT_IPC}/in" ] \
+        && [ -p "${RT_IPC}/out" ] && [ -p "${RT_IPC}/in" ]; then
         # §8.1 — o runtime abriu os dois FIFOs com O_RDWR, então não há bloqueio
         # nem EOF aqui. O helper apenas conecta os descritores.
         exec 3>"${RT_IPC}/out" 4<"${RT_IPC}/in" || return 1
@@ -81,9 +87,13 @@ rt__truncate() {
 }
 
 rt__id() {
-    # §8.4 — ids únicos: $$-$RANDOM-contador
+    # §8.4 — id com 128 bits de /dev/urandom mais contador. O formato antigo
+    # ($$-$RANDOM-contador) era adivinhável por outro processo do mesmo usuário,
+    # que poderia responder a um prompt no lugar do runtime.
     _RT_SEQ=$(( _RT_SEQ + 1 ))
-    printf '%s-%s-%s\n' "$$" "$RANDOM" "$_RT_SEQ"
+    local rnd
+    rnd=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+    printf '%s-%s\n' "$rnd" "$_RT_SEQ"
 }
 
 # ---------------------------------------------------------------------------
