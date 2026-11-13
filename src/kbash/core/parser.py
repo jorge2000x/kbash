@@ -14,12 +14,14 @@ from .errors import Diagnostics, ParseError, ValidationError
 from .model import (
     RUNTIME_VERSION_SUPPORTED,
     Script,
+    is_safe_script_id,
     is_valid_id,
     slugify,
 )
 
 from .parser_opcoes import _OpcoesMixin
 from .parser_passos import _PassosMixin
+from .shell_lex import ShellLexer
 from .parser_base import (
     ACTION_ATTRS,
     ANNOTATION,
@@ -35,9 +37,7 @@ from .parser_base import (
     TRUTHY,
     _Block,
     _bool,
-    _brace_delta,
     _match_function,
-    _strip_comment,
     _tokenize,
     _unquote,
     sha256_of,
@@ -66,19 +66,30 @@ class _Parser(_OpcoesMixin, _PassosMixin):
         self._id = ""
         self._requires: tuple[str, ...] = ()
         self._strict = True
+        # função declarada sem `{` na mesma linha: o próximo código tem de ser `{`
+        self._aguardando_chave: tuple[str, int] | None = None
 
     # -- linha a linha ----------------------------------------------------
     def parse(self) -> None:
         first_code_line: int | None = None
+        lexer = ShellLexer()
         for number, raw in enumerate(self.text.splitlines(), start=1):
-            code = _strip_comment(raw)
-            annotation = raw.lstrip().startswith(ANNOTATION)
-            if not annotation:
-                if code.strip():
-                    first_code_line = first_code_line or number
-                self._handle_code(code, number)
-            else:
+            scanned = lexer.feed(raw)
+            if scanned.literal:
+                # corpo de heredoc ou string aberta: não é anotação nem código
+                self._depth += scanned.brace_delta
+                continue
+            if raw.lstrip().startswith(ANNOTATION):
                 self._handle_annotation(raw, number)
+                continue
+            if scanned.code.strip():
+                first_code_line = first_code_line or number
+            self._handle_code(scanned.code, number, scanned.brace_delta)
+        self._encerra(first_code_line)
+
+    def _encerra(self, first_code_line: int | None) -> None:
+        if self._aguardando_chave is not None:
+            raise self._erro_sem_corpo()
         if self._pending is not None and self._pending.kind in FUNCTION_KINDS:
             raise ParseError(
                 f"bloco #@{self._pending.kind} {self._pending.id!r} sem definição de função",
@@ -87,6 +98,10 @@ class _Parser(_OpcoesMixin, _PassosMixin):
             )
         self._close_pending()
         self._check_loose_top_level(first_code_line)
+
+    def _erro_sem_corpo(self) -> ParseError:
+        name, line = self._aguardando_chave or ("?", None)
+        return ParseError(f"função {name!r} sem corpo: falta '{{' depois da declaração", self.path, line)
 
     def _close_pending(self) -> None:
         """Fecha o bloco de option aberto; steps precisam da definição (§4.1)."""
@@ -176,15 +191,18 @@ class _Parser(_OpcoesMixin, _PassosMixin):
             self._pending.attrs[key] = value
             self._pending.attr_lines[key] = number
 
-    def _handle_code(self, code: str, number: int) -> None:
+    def _handle_code(self, code: str, number: int, delta: int) -> None:
         stripped = code.strip()
         if not stripped:
             return
-        if self._pending is not None and self._pending.kind == "option":
+        if self._aguardando_chave is not None:
+            self._consome_corpo(stripped, delta)
+            return
+        if self._pendente_e_option():
             self._close_pending()  # a linha de código encerra o bloco de option
         function = _match_function(code)
         if function is not None:
-            self._on_function(function[0], code)
+            self._handle_function(function, number, delta)
             return
         if self._pending is not None:
             raise ParseError(
@@ -199,8 +217,24 @@ class _Parser(_OpcoesMixin, _PassosMixin):
         if self._depth <= 0:
             self._loose.append((number, stripped))
 
-    def _on_function(self, name: str, code: str) -> None:
-        self._depth += _brace_delta(code)
+    def _pendente_e_option(self) -> bool:
+        return self._pending is not None and self._pending.kind == "option"
+
+    def _consome_corpo(self, stripped: str, delta: int) -> None:
+        """Função declarada sem `{`: a próxima linha de código tem de abrir o corpo."""
+        if not stripped.startswith("{"):
+            raise self._erro_sem_corpo()
+        self._aguardando_chave = None
+        self._depth += delta
+
+    def _handle_function(self, function: tuple[str, bool], number: int, delta: int) -> None:
+        name, opened = function
+        self._on_function(name, delta)
+        if not opened:
+            self._aguardando_chave = (name, number)
+
+    def _on_function(self, name: str, delta: int) -> None:
+        self._depth += delta
         self.functions.add(name)
         block = self._pending
         if block is not None and block.kind in FUNCTION_KINDS:
@@ -277,8 +311,14 @@ class _Parser(_OpcoesMixin, _PassosMixin):
             raise ParseError("diretiva obrigatória ausente: #@name", path, None)
         self._name = " ".join(_tokenize(self.header["name"], self.header_lines["name"], path))
         raw_id = _unquote(self.header.get("id", "").strip())
-        if raw_id and not is_valid_id(raw_id.replace(".", "_")) and "." not in raw_id:
-            self.diag.warning(f"#@id {raw_id!r} fora do padrão esperado", self.header_lines["id"])
+        # o id vira parte de caminhos (diretório de trabalho e IPC): só segmento seguro
+        if raw_id and not is_safe_script_id(raw_id):
+            raise ParseError(
+                f"#@id {raw_id!r} inválido: use letras, dígitos, '.', '_' ou '-' (até 64 caracteres), "
+                "sem '/', espaço ou '..'",
+                path,
+                self.header_lines["id"],
+            )
         self._id = raw_id or slugify(self._name)
         requires_raw = self.header.get("requires", "")
         self._requires = tuple(
@@ -298,6 +338,10 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+def _digest(text: str, sha256: str | None) -> str:
+    return sha256 if sha256 is not None else hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 @ensure(
     lambda result: len({o.id for o in result.script.options} | {s.id for s in result.script.steps}
                        | {a.id for a in result.script.actions})
@@ -309,17 +353,20 @@ def _read_text(path: Path) -> str:
     and all(a.timeout > 0 for a in result.script.actions),
     "timeout é nulo ou positivo",
 )
-def parse_text(text: str, path: Path | None = None) -> ParseResult:
+def parse_text(text: str, path: Path | None = None, sha256: str | None = None) -> ParseResult:
     """Parseia o conteúdo de um script (sem tocar no disco além do nome).
+
+    ``sha256`` é o hash do arquivo bruto (``sha256_of``). Sem ele, o hash é o do
+    ``text`` como foi dado, shebang incluído.
 
     :raises ParseError: sintaxe ou diretiva inválida, com linha (§4.6).
     :raises ValidationError: referência inexistente, id duplicado, ciclo etc. (§4.6).
     """
+    digest = _digest(text, sha256)
     if text.startswith("#!"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
     parser = _Parser(text, path)
     parser.parse()
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     script = parser.build(path or Path("<script>"), digest)
     return ParseResult(script=script, warnings=tuple(parser.diag.warnings), source=text)
 
@@ -331,7 +378,7 @@ def parse_script(path: Path) -> Script:
     ``cwd=$HOME`` (§7.1), então um caminho relativo quebraria o ``source``.
     """
     path = Path(path).expanduser().resolve()
-    return parse_text(_read_text(path), path).script
+    return parse_text(_read_text(path), path, sha256=sha256_of(path)).script
 
 
 def check_script(path: Path) -> tuple[Script | None, Diagnostics]:

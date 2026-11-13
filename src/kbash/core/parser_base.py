@@ -94,18 +94,6 @@ class ParseResult:
         return self.script.path
 
 
-def _strip_comment(line: str) -> str:
-    """Remove o comentário respeitando aspas simples e duplas."""
-    quote: str | None = None
-    for index, char in enumerate(line):
-        if quote:
-            if char == quote:
-                quote = None
-        elif char in ("'", '"'):
-            quote = char
-        elif char == "#":
-            return line[:index]
-    return line
 
 
 def _match_function(code: str) -> tuple[str, bool] | None:
@@ -128,21 +116,6 @@ def _match_function(code: str) -> tuple[str, bool] | None:
     return name, False
 
 
-def _brace_delta(code: str) -> int:
-    """Saldo de ``{``/``}`` na linha, ignorando o que está entre aspas."""
-    delta = 0
-    quote: str | None = None
-    for char in code:
-        if quote:
-            if char == quote:
-                quote = None
-        elif char in ("'", '"'):
-            quote = char
-        elif char == "{":
-            delta += 1
-        elif char == "}":
-            delta -= 1
-    return delta
 
 
 def _tokenize(value: str, line: int, path: Path | None) -> list[str]:
@@ -203,4 +176,3 @@ class _ParserBase:
 
     def _error(self, message: str, line: int | None) -> None:
         raise ValidationError(message, self.path, line)
-

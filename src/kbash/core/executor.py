@@ -9,7 +9,6 @@ Invariantes (SPEC.md §3/§7/§14):
 
 from __future__ import annotations
 
-import contextlib
 import os
 import secrets
 import shutil
@@ -33,9 +32,14 @@ from .events import (
     StepFinished,
     StepStarted,
 )
+from . import proc
 from .ipc import valid_var_key
+from .proc import GRACE_PERIOD
 from .model import RunPlan, RunState, Script, Step, StepState
 from .planner import build_plan, option_errors
+from .redacao import redige
+from .segredos_root import prepara_root
+from .linhas import MAX_LOG_LINE, linhas_limitadas
 
 __all__ = [
     "GRACE_PERIOD",
@@ -51,7 +55,6 @@ __all__ = [
 ]
 
 #: §7.4 — 5 s entre SIGTERM e SIGKILL.
-GRACE_PERIOD = 5.0
 
 #: §7.1 — comando de execução de um step.
 STEP_COMMAND = (
@@ -69,17 +72,28 @@ ROOT_PASSTHROUGH = (
     "XAUTHORITY", "XDG_RUNTIME_DIR", "XDG_DATA_DIRS",
 )
 
-#: Elevação de privilégio (SPEC.md §9.2) **desligada por enquanto**: os steps
-#: ``#@root true`` rodam como qualquer outro, e o usuário nunca vê um pedido de
-#: senha. Com a elevação ligada, o pkexec mostra o diálogo do sistema (polkit) uma
-#: vez, logo antes do primeiro step, depois que o usuário revisou o plano.
+#: Elevação de privilégio (SPEC.md §9.2) **ligada**: os steps ``#@root true`` passam
+#: pelo pkexec, e o polkit mostra o diálogo do sistema uma vez, logo antes do primeiro
+#: step, depois que o usuário revisou o plano. Riscos abertos: senhas aparecem no argv
+#: do pkexec e o script inteiro roda como root (ver a análise de segurança).
 PRIVILEGE_ELEVATION = True
+
+
+def ambiente_padrao(env: dict[str, str]) -> None:
+    """Padrões para saída limpa de ferramentas: sem códigos de cor nem perguntas do apt.
+
+    Só preenche o que está ausente; um valor definido pelo usuário é mantido.
+    """
+    env.setdefault("TERM", "dumb")
+    env.setdefault("DEBIAN_FRONTEND", "noninteractive")
 
 
 class IpcChannel(Protocol):
     """Transporte de interação (§8) visto pelo executor."""
 
     directory: Path
+    #: respostas de prompts ``secret`` (§8.2), que o log não pode mostrar
+    segredos: list[str]
     #: variáveis de `rt_set` (§7.2), compartilhadas com o executor
     variables: dict[str, str]
     #: id do step atual, usado nas mensagens do IPC
@@ -204,6 +218,13 @@ def precheck(
     return problems
 
 
+def _texto_da_linha(raw: bytes, truncada: bool) -> str:
+    text = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+    # \r volta ao início da linha: fica o estado final (barras de progresso de apt/curl)
+    text = text.rsplit("\r", 1)[-1]
+    return text + " [linha truncada]" if truncada else text
+
+
 class Executor:
     """Executa um :class:`RunPlan` emitindo eventos (§7.3)."""
 
@@ -261,7 +282,7 @@ class Executor:
         with self._lock:
             process = self._process
         if process is not None and process.poll() is None:
-            self._signal_group(process, signal.SIGTERM)
+            proc.signal_group(process, signal.SIGTERM)
         ipc = self._ipc
         if ipc is not None:
             ipc.close()
@@ -345,20 +366,12 @@ class Executor:
     def _run_step(self, step: Step, index: int) -> StepResult:
         started = time.monotonic()
         env = self._build_env(step)
-        argv, cwd = self._build_argv(step, env)
+        argv, cwd, env_processo, entrada = self._build_argv(step, env)
         if self._ipc is not None:
             self._ipc.step_id = step.id
         self._emit(StepStarted(step.id, index, len(self.plan.selected)))
         try:
-            process = subprocess.Popen(  # noqa: S603 - argv em lista, sem shell
-                argv,
-                env=env,
-                cwd=cwd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
-            )
+            process = proc.start(argv, env=env_processo, cwd=cwd, entrada=entrada)
         except (OSError, ValueError) as exc:  # ValueError: nome/valor de env inválido
             self._log(step.id, "kbash", f"não foi possível iniciar o step: {exc}", "error")
             return self._finish(step, StepState.FAILED, None, started, str(exc))
@@ -405,23 +418,9 @@ class Executor:
                 return self._terminate(process), "timeout"
 
     def _terminate(self, process: subprocess.Popen[bytes]) -> int | None:
-        """§7.4 — SIGTERM no grupo, SIGKILL depois de ``GRACE_PERIOD``."""
-        self._signal_group(process, signal.SIGTERM)
-        try:
-            return process.wait(timeout=GRACE_PERIOD)
-        except subprocess.TimeoutExpired:
-            self._signal_group(process, signal.SIGKILL)
-        try:
-            return process.wait(timeout=GRACE_PERIOD)
-        except subprocess.TimeoutExpired:
-            return None
+        """§7.4 — SIGTERM no grupo, SIGKILL depois de ``GRACE_PERIOD`` (core/proc.py)."""
+        return proc.stop(process, GRACE_PERIOD)
 
-    def _signal_group(self, process: subprocess.Popen[bytes], sig: int) -> None:
-        try:
-            os.killpg(os.getpgid(process.pid), sig)
-        except (ProcessLookupError, PermissionError, AttributeError):
-            with contextlib.suppress(ProcessLookupError, ValueError):
-                process.send_signal(sig)
 
     # -- ambiente e comando ---------------------------------------------
     def _build_env(self, step: Step) -> dict[str, str]:
@@ -439,6 +438,7 @@ class Executor:
                 "RT_WORKDIR": str(self._tempdir.name) if self._tempdir else str(Path.cwd()),
             }
         )
+        ambiente_padrao(env)
         for option_id, value in self.plan.options.items():
             env[f"OPT_{option_id.upper()}"] = value
         for key, value in self.variables.items():
@@ -465,23 +465,42 @@ class Executor:
             return workdir
         return str(Path.cwd())
 
-    def _build_argv(self, step: Step, env: dict[str, str]) -> tuple[list[str], str]:
-        home = self._step_cwd(env)
+    def _build_argv(
+        self, step: Step, env: dict[str, str]
+    ) -> tuple[list[str], str, dict[str, str], bytes | None]:
+        """Devolve (argv, cwd, ambiente do processo, entrada do stdin).
+
+        Step root (§9.2): as senhas saem do ambiente e do argv e vão pelo stdin.
+        """
+        home = self._step_cwd(env)  # §7.1 — cwd = $HOME
         argv = ["bash", "--noprofile", "--norc", "-c", STEP_COMMAND]
-        if step.root and PRIVILEGE_ELEVATION:  # §9.2 — desligado por enquanto
-            argv = self.root_command(argv, env, home)
-        return argv, home  # §7.1 — cwd = $HOME
+        if step.root and PRIVILEGE_ELEVATION:  # §9.2 — elevação ligada
+            argv, publico, entrada = prepara_root(STEP_COMMAND, self.script, env, home, self.root_command)
+            return argv, home, publico, entrada
+        return argv, home, env, None
 
     # -- leitura de streams ---------------------------------------------
     def _pump(self, stream: Any, step_id: str, name: str) -> None:
         if stream is None:
             return
         with stream:
-            for raw in iter(stream.readline, b""):
-                text = raw.decode("utf-8", errors="replace").rstrip("\n")
+            for raw, truncada in linhas_limitadas(stream, MAX_LOG_LINE):
+                text = _texto_da_linha(raw, truncada)
                 self._log(step_id, name, text, "error" if name == "stderr" else "info")
 
+    def _segredos(self) -> list[str]:
+        """Senhas (opções ``password``) e respostas de ``rt_secret``: o log não as mostra."""
+        valores = [
+            self.plan.options.get(option.id, "")
+            for option in self.script.options
+            if option.type == "password"
+        ]
+        if self._ipc is not None:
+            valores += self._ipc.segredos
+        return valores
+
     def _log(self, step_id: str | None, stream: str, text: str, level: str = "info") -> None:
+        text = redige(text, self._segredos())
         event = LogLine(step_id, stream, text, level)  # type: ignore[arg-type]
         if self.log_sink is not None:
             self.log_sink(event)

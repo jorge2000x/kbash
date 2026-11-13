@@ -38,9 +38,9 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
 
-            Label {
+            Kirigami.Heading {
+                level: 4
                 text: row.action.title || ""
-                font.bold: true
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }
@@ -75,14 +75,8 @@ ColumnLayout {
         text: row.statusText()
     }
 
-    TextArea {
-        Layout.fillWidth: true
+    OutputPanel {
         visible: text !== "" && !row.action.running
-        readOnly: true
-        wrapMode: TextArea.NoWrap
-        font.family: "monospace"
-        font.pixelSize: theme.smallFont
         text: row.action.output || ""
-        Layout.preferredHeight: Math.min(contentHeight + topPadding + bottomPadding, 240)
     }
 }

@@ -25,6 +25,11 @@ Kirigami.Dialog {
     // para foco de teclado: Enter confirma (§8.2 — o input já
     // tinha Enter; choice/confirm não tinham nada focado).
     property alias defaultButton: acceptButton
+    // gancho: o diálogo pode recusar o aceite pelo botão OK (ex.: validação de prompt);
+    // o padrão aceita. Quem sobrescreve devolve false para manter o diálogo aberto.
+    property var beforeAccept: function () { return true }
+    // foco quando o padrão é recusar (Não): o prompt de confirmação usa
+    property alias refuseFocusItem: refuseButton
 
     // O QML não distingue "recusar" de "rejeitar": quem responde é o Signal.
     signal refused()
@@ -100,7 +105,10 @@ Kirigami.Dialog {
             Layout.topMargin: theme.smallSpacing
             Layout.bottomMargin: theme.smallSpacing
             Layout.rightMargin: theme.smallSpacing
-            onClicked: root.accept()
+            onClicked: {
+                if (root.beforeAccept())
+                    root.accept()
+            }
         }
     }
 }

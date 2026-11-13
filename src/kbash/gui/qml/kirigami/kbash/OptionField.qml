@@ -80,12 +80,8 @@ ColumnLayout {
             text: root.label + (root.required ? " *" : "")
             elide: Text.ElideRight
             Layout.fillWidth: true
-        }
-        Label {
-            text: "OPT_" + root.optId.toUpperCase()
-            opacity: 0.5
-            font.pixelSize: theme.smallFont
-            font.family: "monospace"
+            // o rótulo é o nome do campo para o leitor de tela
+            Accessible.name: root.label
         }
     }
 
@@ -123,7 +119,6 @@ ColumnLayout {
         id: textField
         visible: root.type === "string" || root.type === "path"
               || root.type === "file" || root.type === "number"
-        placeholderText: root.help
         validator: root.type === "number" ? numberValidator
                  : (root.pattern !== "" ? patternValidator : null)
         maximumLength: root.maxlen !== "" ? Number(root.maxlen) : 32767
@@ -168,7 +163,6 @@ ColumnLayout {
         visible: root.type === "text"
         Layout.fillWidth: true
         Layout.preferredHeight: 120
-        placeholderText: root.help
         // sem maximumLength na área: o planner barra no Executar
         onTextChanged: if (textArea.activeFocus) bridge.setOption(root.optId, text)
         Component.onCompleted: root.syncField(textArea)
@@ -181,7 +175,6 @@ ColumnLayout {
     Kirigami.PasswordField {
         id: passwordField
         visible: root.type === "password"
-        placeholderText: root.help
         validator: root.pattern !== "" ? patternValidator : null
         maximumLength: root.maxlen !== "" ? Number(root.maxlen) : 32767
         onTextEdited: bridge.setOption(root.optId, text)
@@ -304,19 +297,30 @@ ColumnLayout {
         Layout.fillWidth: true
     }
 
-    // §4.3 type=link: botão nativo que abre o endereço declarado no script
-    Button {
+    // §4.3 type=link: texto com aparência de link (sublinhado, cor do tema) que
+    // abre o endereço declarado no script
+    Label {
+        id: linkLabel
         visible: root.type === "link"
-        flat: true
-        icon.name: "internet-web-browser"
         text: root.label
-        onClicked: bridge.openLink(root.url)
+        color: Kirigami.Theme.linkColor
+        font.underline: true
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        Accessible.role: Accessible.Link
+        Accessible.name: root.label
+        Accessible.onPressAction: bridge.openLink(root.url)
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: bridge.openLink(root.url)
+        }
     }
 
+    // ajuda do campo: abaixo do controle, sempre visível (não em placeholder)
     Label {
         text: root.help
-        visible: text !== "" && (root.type === "bool" || root.type === "choice"
-                || root.type === "multi" || root.type === "slider")
+        visible: text !== "" && !root.isDisplay
         opacity: 0.65
         font.pixelSize: theme.smallFont
         wrapMode: Text.WordWrap

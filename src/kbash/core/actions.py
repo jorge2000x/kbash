@@ -8,7 +8,6 @@ plano, ``RunResult`` ou o log persistente.
 
 from __future__ import annotations
 
-import contextlib
 import os
 import signal
 import subprocess
@@ -23,9 +22,13 @@ from .executor import (
     GRACE_PERIOD,
     PRIVILEGE_ELEVATION,
     STEP_COMMAND,
+    ambiente_padrao,
     default_root_command,
 )
+from . import proc
 from .model import Action, Script
+from .redacao import redige, segredos_do_script
+from .segredos_root import prepara_root
 from .planner import default_options, expand_value, option_visible
 
 __all__ = ["OUTPUT_LINES", "ActionResult", "action_env", "run_action"]
@@ -113,6 +116,14 @@ def _tail(text: str) -> str:
     return "\n".join(deque(text.splitlines(), maxlen=OUTPUT_LINES))
 
 
+def _notifica(
+    on_start: Callable[[subprocess.Popen[bytes]], None] | None,
+    process: subprocess.Popen[bytes],
+) -> None:
+    if on_start is not None:
+        on_start(process)
+
+
 @ensure(
     lambda result: result.status in ("ok", "failed", "timeout", "error"),
     "status de ação é um dos quatro valores (§4.8)",
@@ -125,6 +136,7 @@ def _tail(text: str) -> str:
     lambda result: len(result.output.splitlines()) <= OUTPUT_LINES,
     "a saída devolvida tem no máximo OUTPUT_LINES linhas",
 )
+
 def run_action(
     script: Script,
     action: Action,
@@ -135,8 +147,12 @@ def run_action(
     assets: Path | None = None,
     workdir: str = "",
     root_command: RootCommand = default_root_command,
+    on_start: Callable[[subprocess.Popen[bytes]], None] | None = None,
 ) -> ActionResult:
     """§4.8/§7.6 — roda a ação e espera (até ``action.timeout``).
+
+    ``on_start`` recebe o processo logo depois de iniciado: quem precisa encerrar a
+    ação de fora (fechar a janela) guarda essa referência e usa ``proc.stop``.
 
     Bloqueante: a GUI chama numa thread. ``#@root true`` passa pelo pkexec
     (§9.2); a autorização é pedida antes, pela GUI.
@@ -157,34 +173,29 @@ def run_action(
             "RT_STEP_FN": action.function,
         }
     )
+    ambiente_padrao(env)
     cwd = _cwd(env, workdir)
     argv: list[str] = ["bash", "--noprofile", "--norc", "-c", STEP_COMMAND]
-    if action.root and PRIVILEGE_ELEVATION:
-        argv = root_command(argv, env, cwd)
+    entrada: bytes | None = None
+    if action.root and PRIVILEGE_ELEVATION:  # §9.2 — senhas fora do argv, pelo stdin
+        argv, env, entrada = prepara_root(STEP_COMMAND, script, env, cwd, root_command)
     try:
         # argv em lista e sem shell (AGENTS.md); o comando root vem do pkexec, §9.2
-        process = subprocess.Popen(  # noqa: S603
-            argv,
-            cwd=cwd,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        process = proc.start(argv, env=env, cwd=cwd, merge_stderr=True, entrada=entrada)
     except (OSError, ValueError) as error:
         return ActionResult(action.id, "error", None, f"não foi possível iniciar: {error}")
+    _notifica(on_start, process)
 
     status = "ok"
     try:
         raw, _ = process.communicate(timeout=action.timeout)
     except subprocess.TimeoutExpired:
         status = "timeout"
-        _signal_group(process, signal.SIGTERM)
+        proc.signal_group(process, signal.SIGTERM)
         try:
             raw, _ = process.communicate(timeout=GRACE_PERIOD)
         except subprocess.TimeoutExpired:
-            _signal_group(process, signal.SIGKILL)
+            proc.signal_group(process, signal.SIGKILL)
             raw, _ = process.communicate()
     code = process.returncode
     if status == "ok" and code != 0:
@@ -193,11 +204,6 @@ def run_action(
         action_id=action.id,
         status=status,
         exit_code=code,
-        output=_tail(raw.decode("utf-8", errors="replace")),
+        output=_tail(redige(raw.decode("utf-8", errors="replace"), segredos_do_script(script, env))),
         duration=time.monotonic() - started,
     )
-
-
-def _signal_group(process: subprocess.Popen[bytes], sig: int) -> None:
-    with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
-        os.killpg(process.pid, sig)

@@ -20,6 +20,8 @@ Rectangle {
     property bool autoAdded
     property string reason
     property string statusLabel
+    // a seleção só existe na tela de escolha; execução e resultado mostram o estado
+    property bool selectable: true
 
     readonly property bool _running: status === "running"
     readonly property bool _success: status === "success"
@@ -58,7 +60,7 @@ Rectangle {
 
         AppCheckBox {
             id: box
-            visible: !root._running
+            visible: root.selectable
             checked: root.checked
             enabled: !root.locked
             onToggled: {
@@ -74,10 +76,6 @@ Rectangle {
             Connections {
                 target: root
                 function onCheckedChanged() { box.checked = root.checked }
-            }
-            ToolTip {
-                visible: box.hovered && root.locked
-                text: bridge.uncheckReason(root.stepId) || qsTr("Etapa obrigatória")
             }
         }
 
@@ -105,6 +103,17 @@ Rectangle {
                 text: root.description
                 visible: text !== ""
                 opacity: 0.7
+                font.pixelSize: theme.smallFont
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+
+            // por que a etapa não pode ser desmarcada: texto na tela, não só no
+            // tooltip (teclado, toque e leitor de tela não veem hover)
+            Label {
+                visible: root.selectable && root.locked && !root._settled
+                text: bridge.uncheckReason(root.stepId) || qsTr("Etapa obrigatória")
+                opacity: 0.8
                 font.pixelSize: theme.smallFont
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true

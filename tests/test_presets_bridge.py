@@ -131,9 +131,10 @@ def test_invalid_choice_from_a_preset_is_reported_as_an_option_error(app, tmp_pa
     assert bridge._options_model.error("perfil") != ""
 
 
-def test_unicode_name_and_spaced_script_id_round_trip(app, tmp_path: Path, home: Path) -> None:
+def test_unicode_name_round_trip(app, tmp_path: Path, home: Path) -> None:
+    # id com espaço agora é erro de parse (tests/test_id_script.py): usa um id seguro
     script = tmp_path / "x.kbash"
-    script.write_text(SCRIPT.replace("#@id backup", "#@id meu backup"), encoding="utf-8")
+    script.write_text(SCRIPT.replace("#@id backup", "#@id meu-backup"), encoding="utf-8")
     bridge = bridge_module.load_bridge(script)
     bridge.setOption("pasta", "/pão/açúcar")
     assert bridge.savePreset("Família — casa ✓") is True

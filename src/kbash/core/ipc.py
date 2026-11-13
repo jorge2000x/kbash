@@ -17,6 +17,7 @@ import json
 import os
 import re
 import secrets
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -25,6 +26,7 @@ from typing import Any
 from .contratos import ensure, require
 from .errors import KbashError
 from .events import EventSink, LogLine, Notify, Progress, ProgressWin, PromptRequest
+from .linhas import MAX_IPC_LINE, LeitorDeLinhas
 
 __all__ = [
     "CANCEL",
@@ -108,6 +110,12 @@ def _fit_escaped(value: str, budget: int) -> str:
 _SEPARADOR_DE_CAMPO = re.compile(r"[\t\n]")
 
 
+def _valida_tokens(request_id: str, status: str) -> None:
+    # no corpo, não só no contrato: sem icontract (AppImage) um separador quebraria o protocolo
+    if _SEPARADOR_DE_CAMPO.search(request_id + status):
+        raise IpcError("id e status não podem conter TAB nem quebra de linha (§8.3)")
+
+
 @require(
     lambda request_id, status: not _SEPARADOR_DE_CAMPO.search(request_id + status),
     "id e status não podem conter TAB nem quebra de linha (§8.3)",
@@ -118,6 +126,7 @@ _SEPARADOR_DE_CAMPO = re.compile(r"[\t\n]")
 )
 def encode_response(request_id: str, status: str, value: str) -> bytes:
     """§8.3 — ``<id>\\t<status>\\t<valor>`` + quebra de linha."""
+    _valida_tokens(request_id, status)
     head = f"{request_id}\t{status}\t"
     escaped = escape_value(value)
     budget = MAX_RESPONSE_LINE - len(head)
@@ -167,6 +176,21 @@ class _Pending:
         self.done = threading.Event()
 
 
+def _bases_do_ipc() -> list[Path]:
+    """XDG_RUNTIME_DIR (se definido) e depois o temporário do sistema."""
+    bases = [Path(xdg)] if (xdg := os.environ.get("XDG_RUNTIME_DIR")) else []
+    bases.append(Path(tempfile.gettempdir()))
+    return bases
+
+
+def _criar_dir_em(base: Path, owner: str) -> Path:
+    base.mkdir(parents=True, exist_ok=True)
+    ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
+    ipc_dir.mkdir(mode=0o700)
+    os.chmod(ipc_dir, 0o700)  # recém-criado por nós: não é um alvo de symlink
+    return ipc_dir
+
+
 class IpcChannel:
     """Fifos da execução (§8.1). Usado pelo executor via ``ipc_factory``."""
 
@@ -178,6 +202,7 @@ class IpcChannel:
         self._emit = emit
         self._processed = 0  # mensagens já lidas (usado por settle)
         self._pending: dict[str, _Pending] = {}
+        self.segredos: list[str] = []  # respostas de prompts secret (§8.2): o log não as mostra
         self._lock = threading.RLock()
         self._closed = False
         self._directory = self._make_dir(owner)
@@ -206,18 +231,19 @@ class IpcChannel:
         como symlink plantado em ``/tmp``), a criação falha em vez de reutilizar
         ou alterar o alvo. Nomes únicos por execução evitam que duas execuções
         simultâneas do mesmo script apaguem os FIFOs uma da outra.
+
+        Tenta ``XDG_RUNTIME_DIR`` e depois o temporário do sistema. Colisão de
+        nome é erro imediato, não motivo para trocar de lugar.
         """
-        # /tmp só sem XDG_RUNTIME_DIR: o mkdir sem exist_ok falha em qualquer
-        # caminho já existente (inclusive symlink plantado), então não há reuso
-        base = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")  # noqa: S108
-        base.mkdir(parents=True, exist_ok=True)
-        ipc_dir = base / (owner or f"kbash-{os.getpid()}-{secrets.token_hex(4)}")
-        try:
-            ipc_dir.mkdir(mode=0o700)
-        except FileExistsError:
-            raise IpcError(f"diretório de IPC já existe: {ipc_dir}") from None
-        os.chmod(ipc_dir, 0o700)  # recém-criado por nós: não é um alvo de symlink
-        return ipc_dir
+        motivos: list[str] = []
+        for base in _bases_do_ipc():
+            try:
+                return _criar_dir_em(base, owner)
+            except FileExistsError:
+                raise IpcError(f"diretório de IPC já existe: {base}") from None
+            except OSError as exc:
+                motivos.append(f"{base}: {exc}")
+        raise IpcError("nenhum diretório gravável para o IPC (" + "; ".join(motivos) + ")")
 
     def close(self) -> None:
         """§7.4 — prompts pendentes recebem ``cancel`` ao encerrar."""
@@ -260,13 +286,20 @@ class IpcChannel:
 
     def respond(self, request_id: str, value: Any = CANCEL) -> None:
         """Responde um :class:`PromptRequest` e libera o script."""
-        with self._lock:
-            item = self._pending.pop(request_id, None)
+        item = self._retira_pendente(request_id, value)
         if item is None:
             return
         status, raw = format_answer(item.event, value)
         self._write(request_id, status, raw)
         item.done.set()
+
+    def _retira_pendente(self, request_id: str, value: Any) -> _Pending | None:
+        """Tira o pedido da fila; se era ``secret``, guarda a resposta para o log escondê-la."""
+        with self._lock:
+            item = self._pending.pop(request_id, None)
+            if item is not None and item.event.secret and isinstance(value, str) and value:
+                self.segredos.append(value)
+            return item
 
     def settle(self, max_wait: float = 0.5) -> None:
         """Espera o que já chegou no FIFO ser processado.
@@ -288,7 +321,7 @@ class IpcChannel:
 
     # -- leitura (script → runtime) --------------------------------------
     def _read_loop(self) -> None:
-        buffer = b""
+        leitor = LeitorDeLinhas(MAX_IPC_LINE)  # linha acima do teto é descartada, não acumulada
         while not self._closed:
             try:
                 chunk = os.read(self._out_fd, 65536)
@@ -300,12 +333,10 @@ class IpcChannel:
             if not chunk:
                 threading.Event().wait(0.02)
                 continue
-            buffer += chunk
-            while b"\n" in buffer:
-                line, _, buffer = buffer.partition(b"\n")
+            for line in leitor.alimenta(chunk):
                 self._handle_line(line)
-        if buffer.strip():
-            self._handle_line(buffer)
+        for line in leitor.fecha():
+            self._handle_line(line)
 
     def _handle_line(self, raw: bytes) -> None:
         """Processa uma linha; nenhuma mensagem malformada pode matar o leitor.

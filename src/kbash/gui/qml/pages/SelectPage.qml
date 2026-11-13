@@ -13,8 +13,9 @@ AppPage {
     heading: bridge.scriptName
     subheading: qsTr("Escolha as opções e as etapas")
 
-    // predefinições (§9.4): escolher, salvar e apagar; sem cartão próprio
-    RowLayout {
+    // predefinições (§9.4): escolher, salvar e apagar; sem cartão próprio.
+    // Flow: em janela estreita os controles quebram para a linha de baixo
+    Flow {
         Layout.fillWidth: true
         visible: bridge.optionCount > 0
         spacing: theme.smallSpacing
@@ -25,7 +26,7 @@ AppPage {
         }
         AppComboBox {
             id: presetBox
-            Layout.fillWidth: true
+            width: Math.min(280, page.width - 40)
             model: bridge.presetNames
             displayText: count === 0 ? qsTr("nenhuma salva") : currentText
             currentIndex: -1
@@ -33,6 +34,8 @@ AppPage {
         }
         AppButton {
             text: qsTr("Excluir")
+            // o texto curto cabe na linha; o leitor de tela diz o que vai acontecer
+            Accessible.name: qsTr("Excluir predefinição selecionada")
             enabled: presetBox.currentIndex >= 0
             onClicked: {
                 bridge.deletePreset(presetBox.currentText)

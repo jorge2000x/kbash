@@ -94,6 +94,7 @@ AppPage {
                 group: model.group
                 checked: model.checked
                 locked: true
+                selectable: false
                 status: model.status
                 needsRoot: model.root
                 duration: model.duration

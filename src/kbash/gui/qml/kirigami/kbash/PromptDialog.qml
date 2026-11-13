@@ -22,6 +22,31 @@ AppDialog {
     property var selectedList: []
 
     readonly property bool isConfirm: kind === "confirm"
+
+    // erro da resposta number/date/time, na mesma regra do terminal (bridge.validateAnswer)
+    property string fieldError: ""
+
+    function fieldText(): string {
+        if (kind === "number") return numberField.text
+        if (kind === "date") return dateField.text
+        if (kind === "time") return timeField.text
+        return ""
+    }
+
+    // o aceite só fecha o diálogo se a resposta for válida: o terminal recusaria o mesmo valor
+    beforeAccept: function () {
+        if (kind !== "number" && kind !== "date" && kind !== "time") {
+            fieldError = ""
+            return true
+        }
+        fieldError = bridge.validateAnswer(kind, fieldText(), promptMin, promptMax)
+        return fieldError === ""
+    }
+
+    function tryAccept(): void {
+        if (beforeAccept())
+            root.accept()
+    }
     // informativo: fechar (X ou Esc) é ok, não cancel (§8.2 —
     // kdialog --textbox também só tem OK)
     readonly property bool isTextbox: kind === "textbox"
@@ -64,35 +89,49 @@ AppDialog {
         visible: root.kind === "input"
         text: root.promptDefault === undefined || root.promptDefault === null ? "" : String(root.promptDefault)
         echoMode: root.promptSecret ? TextInput.Password : TextInput.Normal
-        onAccepted: root.accept()
+        onAccepted: root.tryAccept()
     }
 
     AppTextField {
         id: numberField
+        onTextEdited: root.fieldError = ""
         visible: root.kind === "number"
         text: root.promptDefault === undefined || root.promptDefault === null ? "" : String(root.promptDefault)
         placeholderText: (root.promptMin !== "" || root.promptMax !== "")
             ? qsTr("entre %1 e %2").arg(root.promptMin || "…").arg(root.promptMax || "…") : ""
         validator: DoubleValidator { locale: "C"; notation: DoubleValidator.StandardNotation }
-        onAccepted: root.accept()
+        onAccepted: root.tryAccept()
     }
 
     AppTextField {
         id: dateField
+        onTextEdited: root.fieldError = ""
         visible: root.kind === "date"
         text: root.promptDefault === undefined || root.promptDefault === null ? "" : String(root.promptDefault)
         placeholderText: qsTr("AAAA-MM-DD")
         inputMask: "0000-00-00"
-        onAccepted: root.accept()
+        onAccepted: root.tryAccept()
     }
 
     AppTextField {
         id: timeField
+        onTextEdited: root.fieldError = ""
         visible: root.kind === "time"
         text: root.promptDefault === undefined || root.promptDefault === null ? "" : String(root.promptDefault)
         placeholderText: qsTr("HH:MM")
         inputMask: "00:00"
-        onAccepted: root.accept()
+        onAccepted: root.tryAccept()
+    }
+
+    Label {
+        id: fieldErrorLabel
+        visible: root.fieldError !== ""
+        text: root.fieldError
+        color: Kirigami.Theme.negativeTextColor
+        wrapMode: Text.WordWrap
+        Layout.fillWidth: true
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: text
     }
 
     RowLayout {
@@ -105,7 +144,7 @@ AppDialog {
             Layout.fillWidth: true
             text: root.promptDefault === undefined || root.promptDefault === null ? "" : String(root.promptDefault)
             placeholderText: qsTr("Caminho do arquivo")
-            onAccepted: root.accept()
+            onAccepted: root.tryAccept()
         }
         AppButton {
             text: qsTr("Procurar…")
@@ -202,6 +241,9 @@ AppDialog {
         else if (kind === "time") timeField.forceActiveFocus()
         else if (kind === "file") fileField.forceActiveFocus()
         else if (kind === "text") textArea.forceActiveFocus()
+        // confirmação com padrão Não: o foco vai para o Não, para que Enter não
+        // confirme uma ação destrutiva por engano (HIG: o padrão é o botão focado)
+        else if (isConfirm && !defaultYes) refuseFocusItem.forceActiveFocus()
         // teclado: Enter aceita; sem foco inicial só o mouse responde
         else defaultButton.forceActiveFocus()
     }

@@ -85,6 +85,7 @@ Rectangle {
         AppCheckBox {
             id: scrollToggle
             text: qsTr("Auto")
+            Accessible.name: qsTr("Rolar automaticamente")
             checked: true
         }
         AppButton {

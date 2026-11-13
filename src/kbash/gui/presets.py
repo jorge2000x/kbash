@@ -16,10 +16,14 @@ quem chama filtra antes de salvar.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import tempfile
 import re
+from collections.abc import Iterator
 from pathlib import Path
+from typing import IO
 
 CONFIG_DIR_NAME = "kbash-config"
 MAX_NAME_LENGTH = 60
@@ -106,10 +110,21 @@ def write_presets(
     """Grava o arquivo do script de forma atômica (arquivo temporário + troca)."""
     path = preset_file(script_id, folder)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(
-        json.dumps(presets, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, path)
+    with _temporario_para(path) as file:
+        file.write(json.dumps(presets, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     return path
+
+
+@contextlib.contextmanager
+def _temporario_para(path: Path) -> Iterator[IO[str]]:
+    # nome aleatório e criação exclusiva (mkstemp), no mesmo diretório: um symlink
+    # plantado num nome previsível não é seguido e não sobrescreve nada fora daqui
+    handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as file:
+            yield file
+        os.replace(temporary, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary)
+        raise
