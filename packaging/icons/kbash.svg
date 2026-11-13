@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 48 48">
+  <title>kbash</title>
+  <defs>
+    <linearGradient id="face" x1="0" y1="4" x2="0" y2="43" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4a545e"/>
+      <stop offset="1" stop-color="#2c3238"/>
+    </linearGradient>
+    <linearGradient id="some" x1="12" y1="12" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="fade" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+      <rect width="48" height="48" fill="url(#some)"/>
+    </mask>
+    <clipPath id="tile"><rect x="4" y="4" width="40" height="40" rx="6"/></clipPath>
+
+    <!-- contorno do pássaro (com bico) e galho, para a sombra longa -->
+    <g id="sil">
+      <polygon points="6,20.5 18,16 20,12.5 24,10 29,11.5 32,16 34,22 35,28 35.5,33 37,39 32,38 26,35 21,31 19.5,26 18,22"/>
+      <rect x="13" y="35" width="26" height="3" rx="1.5"/>
+    </g>
+  </defs>
+
+  <rect x="4" y="4" width="40" height="40" rx="6" fill="#1b1e20"/>
+  <rect x="4" y="4" width="40" height="39" rx="6" fill="url(#face)"/>
+
+  <g clip-path="url(#tile)">
+    <!-- sombra longa -->
+    <g opacity=".3" mask="url(#fade)" fill="#000">
+      <use href="#sil" transform="translate(0.5 0.5)"/>
+      <use href="#sil" transform="translate(1 1)"/>
+      <use href="#sil" transform="translate(1.5 1.5)"/>
+      <use href="#sil" transform="translate(2 2)"/>
+      <use href="#sil" transform="translate(2.5 2.5)"/>
+      <use href="#sil" transform="translate(3 3)"/>
+      <use href="#sil" transform="translate(3.5 3.5)"/>
+      <use href="#sil" transform="translate(4 4)"/>
+      <use href="#sil" transform="translate(4.5 4.5)"/>
+      <use href="#sil" transform="translate(5 5)"/>
+      <use href="#sil" transform="translate(5.5 5.5)"/>
+      <use href="#sil" transform="translate(6 6)"/>
+      <use href="#sil" transform="translate(6.5 6.5)"/>
+      <use href="#sil" transform="translate(7 7)"/>
+      <use href="#sil" transform="translate(7.5 7.5)"/>
+      <use href="#sil" transform="translate(8 8)"/>
+      <use href="#sil" transform="translate(8.5 8.5)"/>
+      <use href="#sil" transform="translate(9 9)"/>
+      <use href="#sil" transform="translate(9.5 9.5)"/>
+      <use href="#sil" transform="translate(10 10)"/>
+      <use href="#sil" transform="translate(10.5 10.5)"/>
+      <use href="#sil" transform="translate(11 11)"/>
+      <use href="#sil" transform="translate(11.5 11.5)"/>
+      <use href="#sil" transform="translate(12 12)"/>
+      <use href="#sil" transform="translate(12.5 12.5)"/>
+      <use href="#sil" transform="translate(13 13)"/>
+      <use href="#sil" transform="translate(13.5 13.5)"/>
+      <use href="#sil" transform="translate(14 14)"/>
+      <use href="#sil" transform="translate(14.5 14.5)"/>
+      <use href="#sil" transform="translate(15 15)"/>
+      <use href="#sil" transform="translate(15.5 15.5)"/>
+      <use href="#sil" transform="translate(16 16)"/>
+      <use href="#sil" transform="translate(16.5 16.5)"/>
+      <use href="#sil" transform="translate(17 17)"/>
+      <use href="#sil" transform="translate(17.5 17.5)"/>
+      <use href="#sil" transform="translate(18 18)"/>
+      <use href="#sil" transform="translate(18.5 18.5)"/>
+      <use href="#sil" transform="translate(19 19)"/>
+      <use href="#sil" transform="translate(19.5 19.5)"/>
+      <use href="#sil" transform="translate(20 20)"/>
+      <use href="#sil" transform="translate(20.5 20.5)"/>
+      <use href="#sil" transform="translate(21 21)"/>
+      <use href="#sil" transform="translate(21.5 21.5)"/>
+      <use href="#sil" transform="translate(22 22)"/>
+      <use href="#sil" transform="translate(22.5 22.5)"/>
+      <use href="#sil" transform="translate(23 23)"/>
+      <use href="#sil" transform="translate(23.5 23.5)"/>
+      <use href="#sil" transform="translate(24 24)"/>
+    </g>
+
+    <!-- galho: três faixas, de cima para baixo mais escuras -->
+    <rect x="13" y="35" width="26" height="3" rx="1.5" fill="#6b4f37"/>
+    <rect x="13" y="35" width="26" height="2" rx="1" fill="#8c6a4b"/>
+    <rect x="14" y="35" width="24" height="0.7" rx="0.35" fill="#a88562"/>
+
+    <!-- corpo: base azul-escura, depois as facetas -->
+    <polygon points="18,16 20,12.5 24,10 29,11.5 32,16 34,22 35,28 35.5,33 37,39 32,38 26,35 21,31 19.5,26 18,22" fill="#2a7fb8"/>
+
+    <!-- cabeça -->
+    <polygon points="20,12.5 24,10 29,11.5 32,16 27,15 21,15.5" fill="#6fcbf5"/>
+    <polygon points="18,16 20,12.5 21,15.5 27,15 32,16 34,22 29,22 22,21.5 18,22" fill="#3daee9"/>
+
+    <!-- garganta -->
+    <polygon points="18,22 22,21.5 23.5,24.5 19.5,26" fill="#eff0f1"/>
+    <polygon points="19.5,26 23.5,24.5 22.5,27.5" fill="#bdc3c7"/>
+
+    <!-- peito: três planos de laranja -->
+    <polygon points="19.5,26 23.5,24.5 28,24 31,28 30,33 26,35 21,31" fill="#f67400"/>
+    <polygon points="19.5,26 23.5,24.5 25,28 21,31" fill="#ff9a3c"/>
+    <polygon points="26,30 31,28 30,33 26,35" fill="#d35a00"/>
+
+    <!-- asa -->
+    <polygon points="28,22 34,22 35,28 35.5,33 31,32 29,27" fill="#1d6fa5"/>
+    <polygon points="28,22 34,22 34.5,25.5 30,25" fill="#3daee9"/>
+    <polygon points="31,32 35.5,33 35,28 32.5,29" fill="#175c8a"/>
+
+    <!-- rabo -->
+    <polygon points="31,32 35.5,33 37,39 32,38" fill="#1d6fa5"/>
+    <polygon points="33.5,33 35.5,33 37,39 34,38.5" fill="#175c8a"/>
+
+    <!-- bico -->
+    <polygon points="6,20.5 18,16 18,19.2" fill="#6b747b"/>
+    <polygon points="6,20.5 18,19.2 18,22" fill="#232629"/>
+
+    <!-- faixa laranja atrás do olho -->
+    <polygon points="25,16.5 29,17.5 28.5,19.5 25,19" fill="#f67400"/>
+
+    <!-- pés -->
+    <rect x="21.5" y="34.8" width="3.2" height="1.6" rx=".8" fill="#e8590c"/>
+    <rect x="26" y="35" width="3.2" height="1.6" rx=".8" fill="#c2410c"/>
+
+    <!-- olho, como nos ícones do Breeze -->
+    <circle cx="22.5" cy="17.5" r="2.2" fill="#eff0f1"/>
+    <circle cx="22.2" cy="17.6" r="1.5" fill="#2c3e50"/>
+    <circle cx="22.8" cy="17" r=".5" fill="#fff"/>
+  </g>
+</svg>

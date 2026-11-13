@@ -369,27 +369,13 @@ exit \$_rc
 APPRUN
 chmod +x "$BUILD/AppRun"
 
-# o icone: PNG 256x256 gerado na hora (o .desktop aponta pra kbash)
+# o ícone: SVG do repositório, na raiz do AppDir (o .desktop aponta pra kbash) e
+# no tema hicolor, de onde a janela o lê (gui/library.py: icone_do_bundle)
 log "ícone"
-python3 - "$BUILD/kbash.png" <<'ICO'
-import zlib, struct, sys
-W = H = 256
-px = bytearray()
-for y in range(H):
-    px.append(0)
-    for x in range(W):
-        d = ((x - 128) ** 2 + (y - 128) ** 2) ** 0.5
-        if d < 96:   px += bytes((26, 32, 44, 255))
-        elif d < 112: px += bytes((61, 174, 233, 255))
-        else:        px += bytes((0, 0, 0, 0))
-def chunk(t, d):
-    return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
-open(sys.argv[1], "wb").write(
-    b"\x89PNG\r\n\x1a\n"
-    + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 6, 0, 0, 0))
-    + chunk(b"IDAT", zlib.compress(bytes(px), 9))
-    + chunk(b"IEND", b""))
-ICO
+ICONE="$REPO/packaging/icons/kbash.svg"
+[ -f "$ICONE" ] || { echo "erro: ícone ausente em $ICONE" >&2; exit 1; }
+install -Dm644 "$ICONE" "$BUILD/kbash.svg"
+install -Dm644 "$ICONE" "$APP/share/icons/hicolor/scalable/apps/kbash.svg"
 cat > "$BUILD/kbash.desktop" <<'DESK'
 [Desktop Entry]
 Type=Application
@@ -398,6 +384,11 @@ Exec=AppRun
 Icon=kbash
 Categories=Utility;
 MimeType=application/x-kbash;
+Actions=Escolher;
+
+[Desktop Action Escolher]
+Name=Escolher outro script
+Exec=AppRun home
 DESK
 # tipo MIME da extensão .kbash (o sistema registra ao integrar o AppImage)
 mkdir -p "$APP/share/mime/packages"
