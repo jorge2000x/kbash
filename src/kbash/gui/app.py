@@ -125,7 +125,10 @@ def create_engine(
     app.setApplicationDisplayName("kbash")
     app.setOrganizationName("kbash")
     app.setApplicationVersion("0.1.0")
-    app.setWindowIcon(QIcon.fromTheme("system-software-install"))
+    from .library import icone_do_bundle
+
+    icone = icone_do_bundle()
+    app.setWindowIcon(QIcon(str(icone)) if icone is not None else QIcon.fromTheme("system-software-install"))
     _fonte_base(app)
 
     from ..core.model import placeholder_script
