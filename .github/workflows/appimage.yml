@@ -3,6 +3,7 @@ name: AppImage
 # Gera dois AppImages do kbash a cada push na main, a cada tag v* e sob demanda:
 #   - embutido: já traz o script de exemplo (examples/sober-optimizer.sh) e abre direto nele;
 #   - limpo: sem script, abre na tela inicial (home) para escolher um arquivo.
+# Cada um sai em x86_64 (runner ubuntu-24.04) e aarch64 (runner ubuntu-24.04-arm).
 # Os arquivos saem como artefatos do run; em tags v* também vão para a Release.
 
 on:
@@ -16,8 +17,8 @@ permissions:
 
 jobs:
   build:
-    name: AppImage ${{ matrix.variant }}
-    runs-on: ubuntu-24.04
+    name: AppImage ${{ matrix.variant }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     # Container ubuntu:24.04 + Python 3.11 (deadsnakes): é a receita do build de 39 MB
     container: ubuntu:24.04
     strategy:
@@ -25,11 +26,25 @@ jobs:
       matrix:
         include:
           - variant: embutido
+            arch: x86_64
+            runner: ubuntu-24.04
             payload: examples/sober-optimizer.sh
             out: kbash-embutido-x86_64.AppImage
           - variant: limpo
+            arch: x86_64
+            runner: ubuntu-24.04
             payload: ""
             out: kbash-limpo-x86_64.AppImage
+          - variant: embutido
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+            payload: examples/sober-optimizer.sh
+            out: kbash-embutido-aarch64.AppImage
+          - variant: limpo
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+            payload: ""
+            out: kbash-limpo-aarch64.AppImage
 
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +72,14 @@ jobs:
       - name: Pacotes Kirigami/Breeze (Ubuntu 26.04)
         run: |
           mkdir -p "$RUNNER_TEMP/debs" && cd "$RUNNER_TEMP/debs"
-          grep "^https" "$GITHUB_WORKSPACE/tools/breeze-debs.txt" | xargs -n1 -P8 curl -sSfO
+          # aarch64: os mesmos pacotes do pool, em ports.ubuntu.com e com sufixo _arm64
+          sed -e 's#archive.ubuntu.com/ubuntu/#ports.ubuntu.com/ubuntu-ports/#' \
+              -e 's/_amd64\.deb/_arm64.deb/' \
+              "$GITHUB_WORKSPACE/tools/breeze-debs.txt" > "$RUNNER_TEMP/breeze-debs.txt"
+          if [ "${{ matrix.arch }}" = x86_64 ]; then
+              cp "$GITHUB_WORKSPACE/tools/breeze-debs.txt" "$RUNNER_TEMP/breeze-debs.txt"
+          fi
+          grep "^https" "$RUNNER_TEMP/breeze-debs.txt" | xargs -n1 -P8 curl -sSfO
           mkdir -p "$RUNNER_TEMP/debsx"
           for f in *.deb; do dpkg-deb -x "$f" "$RUNNER_TEMP/debsx"; done
 
@@ -65,7 +87,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           curl -sSfLo appimagetool.AppImage \
-            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.arch }}.AppImage
           chmod +x appimagetool.AppImage
           ./appimagetool.AppImage --appimage-extract >/dev/null
           test -x squashfs-root/AppRun
@@ -74,6 +96,7 @@ jobs:
         env:
           VENV: ${{ runner.temp }}/venv
           DEBS: ${{ runner.temp }}/debsx
+          ARCH_KBASH: ${{ matrix.arch }}
           BUILD: ${{ runner.temp }}/appdir-${{ matrix.variant }}
           APPIMAGETOOL: ${{ runner.temp }}/squashfs-root/AppRun
           PAYLOAD: ${{ matrix.payload }}
